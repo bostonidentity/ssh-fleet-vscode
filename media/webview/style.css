@@ -1,0 +1,1137 @@
+/* SSH Fleet console styles. Layout designed for a single-pane operator
+   console; colours mapped to VSCode theme variables so light/dark themes
+   both render natively. */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  background: var(--vscode-editor-background);
+  color: var(--vscode-foreground);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---------- Header ---------- */
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-sideBar-background);
+}
+header h1 {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--vscode-titleBar-activeForeground);
+}
+.header-spacer { flex: 1; }
+.config-bar { display: flex; align-items: center; gap: 4px; }
+.config-bar select {
+  padding: 2px 6px;
+  font-size: 11px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-radius: 3px;
+}
+.status {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}
+.status.sep { opacity: 0.5; }
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: 1px solid transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--vscode-button-secondaryHoverBackground); }
+.btn.primary {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+.btn.primary:hover { background: var(--vscode-button-hoverBackground); }
+.btn.danger {
+  color: var(--vscode-errorForeground);
+  border-color: var(--vscode-errorForeground);
+  background: transparent;
+}
+
+/* ---------- Filter row ---------- */
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--vscode-editorWidget-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  font-size: 11px;
+}
+.filter-dd-wrap { position: relative; }
+.filter-dd-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-radius: 2px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.filter-dd-btn .arrow { font-size: 9px; opacity: 0.7; }
+.filter-dd-btn:hover { background: var(--vscode-toolbar-hoverBackground); }
+.filter-dd-btn.has-selection {
+  border-color: var(--vscode-textLink-foreground);
+  color: var(--vscode-textLink-foreground);
+}
+.filter-dd {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 2px;
+  background: var(--vscode-menu-background, var(--vscode-editor-background));
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  padding: 4px 0;
+  min-width: 160px;
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 100;
+}
+.filter-dd label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.filter-dd label:hover { background: var(--vscode-list-hoverBackground); }
+.filter-dd label input { margin: 0; }
+.filter-dd .filter-dd-empty {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+.filter-input {
+  flex: 1;
+  padding: 2px 6px;
+  font-size: 11px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-radius: 2px;
+}
+.filter-input:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  border-color: transparent;
+}
+
+/* ---------- CWD bar ---------- */
+
+.cwd-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--vscode-editorWidget-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  font-size: 13px;
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+}
+.cwd-bar .cwd-btn,
+.cwd-bar .cwd-segment,
+.cwd-bar .cwd-sep { font-size: 13px; }
+.cwd-label {
+  color: var(--vscode-descriptionForeground);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.cwd-crumb {
+  display: flex;
+  align-items: center;
+  /* Size to content — without this the crumb flex-grows and shares the
+     remaining space with .cwd-spacer, leaving the copy button stranded
+     in the middle. With flex:0,1,auto the crumb takes only what its
+     segments need; the spacer takes all slack and pushes the backup
+     badge to the far right where it belongs. */
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.cwd-empty {
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+.cwd-mixed {
+  color: var(--vscode-charts-yellow, #d97706);
+}
+.cwd-segment {
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 2px;
+  color: var(--vscode-textLink-foreground);
+}
+.cwd-segment:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+/* `.current` class is added by renderCwdBar() to mark the deepest
+   breadcrumb segment, but we deliberately give it no visual differentiation
+   from the other segments. Every segment is clickable (clicking re-runs
+   `cd <segment> && ls` to refresh), so calling out "current" with bold
+   or different colour misleads operators into thinking it's disabled. */
+.cwd-segment.cwd-home {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 4px;
+  color: var(--vscode-textLink-foreground);
+}
+.cwd-segment.cwd-home svg {
+  display: block;
+}
+.cwd-segment.cwd-home:hover {
+  color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
+}
+.cwd-segment.cwd-home.current {
+  cursor: default;
+  color: var(--vscode-foreground);
+}
+.cwd-sep {
+  color: var(--vscode-descriptionForeground);
+  margin: 0 1px;
+}
+.cwd-spacer { flex: 1; min-width: 8px; }
+.cwd-btn {
+  padding: 2px 6px;
+  font-size: 11px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.cwd-btn:hover { background: var(--vscode-toolbar-hoverBackground); }
+.cwd-home-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 5px;
+  color: var(--vscode-textLink-foreground);
+}
+.cwd-home-btn svg { display: block; }
+.cwd-home-btn:hover { color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground)); }
+
+/* Copy-cwd button — same shape as the home button (icon-only, no padding
+   bloat). `.copied` flips the colour to green for ~1s after a successful
+   copy so the operator gets visual confirmation without a popup. */
+.cwd-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 5px;
+  color: var(--vscode-descriptionForeground);
+}
+.cwd-copy-btn svg { display: block; }
+.cwd-copy-btn:hover { color: var(--vscode-textLink-foreground); }
+.cwd-copy-btn.copied {
+  color: var(--vscode-testing-iconPassed, #22c55e);
+}
+
+/* `ls -l` row file / dir / symlink names — distinct colours so the type
+   is recognisable at a glance, mirroring `ls --color`'s defaults
+   (directories blue, symlinks cyan, files plain). All three keep cursor
+   pointer + underline-on-hover so they read as actionable links. */
+.ls-name {
+  cursor: pointer;
+}
+.ls-name:hover { text-decoration: underline; }
+.ls-dir {
+  font-weight: 600;
+  color: var(--vscode-textLink-foreground);
+}
+.ls-dir:hover { color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground)); }
+.ls-file {
+  color: var(--vscode-foreground);
+}
+.ls-file:hover { color: var(--vscode-textLink-foreground); }
+.ls-link {
+  font-style: italic;
+  color: var(--vscode-charts-blue, #4ec9b0);
+}
+.ls-link:hover { color: var(--vscode-textLink-activeForeground, var(--vscode-charts-blue, #4ec9b0)); }
+
+/* Executable bit set anywhere — match GNU ls --color's default green. */
+.ls-exec {
+  color: var(--vscode-charts-green, #2ea043);
+  font-weight: 600;
+}
+.ls-exec:hover { color: var(--vscode-textLink-activeForeground, var(--vscode-charts-green, #2ea043)); }
+.cwd-dd-wrap { position: relative; }
+/* CWD-bar dropdowns pop UPWARD (the bar sits at the bottom of the panel
+   above the cmd-area, so opening downward would clip behind the prompt)
+   and align to the LEFT edge of the trigger button so the dropdown body
+   stays within the panel even when the button is near the left edge. */
+.cwd-dd {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 4px;
+  background: var(--vscode-menu-background, var(--vscode-editor-background));
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.25);
+  padding: 6px 8px;
+  min-width: 180px;
+  z-index: 100;
+}
+/* Bookmarks combo entry "Add current directory" sits at the top of the
+   dropdown — colour it like a primary action, with a separator from the
+   saved list below. Disabled state (no common cwd, or already bookmarked)
+   dims it out. */
+.cwd-dd-item.cwd-dd-add {
+  color: var(--vscode-textLink-foreground);
+  font-weight: 600;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  margin-bottom: 4px;
+  padding-bottom: 5px;
+}
+.cwd-dd-item.cwd-dd-add-disabled {
+  color: var(--vscode-descriptionForeground);
+  font-weight: normal;
+  cursor: default;
+  font-style: italic;
+}
+.cwd-dd-item.cwd-dd-add-disabled:hover {
+  background: transparent;
+}
+
+/* Schedule modal — live status banner + silent checkbox styling. */
+.sched-live {
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-panel-border);
+  color: var(--vscode-descriptionForeground);
+}
+.sched-live.active {
+  border-color: var(--vscode-charts-green, #2ea043);
+  color: var(--vscode-foreground);
+}
+.sched-silent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 4px;
+  font-size: 12px;
+}
+
+/* Header schedule button gains a green dot while a schedule is live so
+   the operator can see at a glance that something is ticking in the
+   background. The dot itself is the at-a-glance signal; full state
+   lives in the tooltip. */
+.cmd-tbtn.sched-active {
+  border-color: var(--vscode-charts-green, #2ea043);
+  font-weight: 600;
+}
+.cmd-tbtn.sched-active .sched-dot {
+  color: var(--vscode-charts-green, #2ea043);
+  /* Subtle pulse so a stuck-on indicator doesn't disappear into the
+     toolbar visually. 1.6s is slow enough to not be annoying. */
+  animation: sched-dot-pulse 1.6s ease-in-out infinite;
+  margin-right: 2px;
+  font-size: 10px;
+  vertical-align: middle;
+}
+@keyframes sched-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+.cwd-dd label {
+  display: block;
+  padding: 2px 0;
+  cursor: pointer;
+  font-size: 11px;
+}
+.cwd-dd input[type="checkbox"] { margin-right: 6px; }
+.cwd-dd-preview {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--vscode-panel-border);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  color: var(--vscode-textLink-foreground);
+}
+.cwd-dd .btn { margin-top: 6px; width: 100%; }
+.cwd-dd-item {
+  display: block;
+  padding: 4px 6px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--vscode-textLink-foreground);
+  border-radius: 2px;
+  /* Reset UA defaults so this rule works regardless of whether the
+     element is <div>, <button>, or <a>. Without these, <button> shows
+     the browser's pill-shaped chrome on top of our flat dark theme. */
+  background: transparent;
+  border: none;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+}
+.cwd-dd-item:hover { background: var(--vscode-toolbar-hoverBackground); }
+.cwd-dd-empty { font-size: 11px; color: var(--vscode-descriptionForeground); padding: 4px 6px; }
+
+/* Bookmark rows: clickable label on the left + delete × on the right.
+   Inherits .cwd-dd-item's padding/hover; adding `display: flex` here
+   only on rows that opt in (via .cwd-dd-row) so the existing single-
+   action items (add-current, recent-cwd) keep their block layout. */
+.cwd-dd-row {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  padding: 0 !important; /* children take over inner spacing */
+}
+.cwd-dd-label {
+  flex: 1;
+  padding: 4px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cwd-dd-del {
+  padding: 4px 8px;
+  color: var(--vscode-descriptionForeground);
+  border-radius: 2px;
+  user-select: none;
+  /* Hidden by default; revealed on row hover so the × doesn't draw the
+     eye away from the path label during normal scanning. */
+  visibility: hidden;
+}
+.cwd-dd-row:hover .cwd-dd-del { visibility: visible; }
+.cwd-dd-del:hover {
+  color: var(--vscode-errorForeground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.hidden { display: none !important; }
+
+/* ---------- Output toolbar ---------- */
+
+/* ---------- Output tabs ---------- */
+.output-tabs {
+  display: flex;
+  background: var(--vscode-tab-inactiveBackground);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  min-height: 26px;
+  overflow-x: auto;
+}
+.output-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 11px;
+  border-right: 1px solid var(--vscode-panel-border);
+  cursor: pointer;
+  color: var(--vscode-tab-inactiveForeground);
+  white-space: nowrap;
+  user-select: none;
+}
+.output-tab:hover { background: var(--vscode-toolbar-hoverBackground); }
+.output-tab.active {
+  background: var(--vscode-tab-activeBackground);
+  color: var(--vscode-tab-activeForeground);
+  border-bottom: 2px solid var(--vscode-focusBorder);
+}
+.output-tab.warn .output-tab-label {
+  color: var(--vscode-errorForeground);
+  font-weight: 600;
+}
+.output-tab.active.warn {
+  border-bottom-color: var(--vscode-errorForeground);
+}
+.output-tab .output-tab-close {
+  margin-left: 8px;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  border-radius: 2px;
+}
+.output-tab .output-tab-close:hover {
+  color: var(--vscode-errorForeground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editorWidget-background);
+}
+.toolbar-spacer { flex: 1; }
+.run-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.run-progress-bar {
+  width: 100px;
+  height: 4px;
+  background: var(--vscode-editorWidget-border, var(--vscode-panel-border));
+  border-radius: 2px;
+  overflow: hidden;
+}
+.run-progress-fill {
+  height: 100%;
+  background: var(--vscode-progressBar-background, var(--vscode-textLink-foreground));
+  width: 0;
+  transition: width 0.2s ease;
+}
+.run-progress-fill.has-failure {
+  background: var(--vscode-errorForeground);
+}
+.run-progress-text {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  min-width: 40px;
+}
+.tbtn {
+  padding: 2px 8px;
+  font-size: 10px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.tbtn:hover { background: var(--vscode-toolbar-hoverBackground); }
+.tbtn.danger { color: var(--vscode-errorForeground); }
+
+/* ---------- Output ---------- */
+
+.output {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 12px;
+  font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+}
+.output .line {
+  white-space: pre-wrap;
+  word-break: break-all;
+  /* Skip layout/paint for off-screen lines — browsers honour this on
+     scroll and it dramatically reduces re-layout cost when the buffer
+     is full of 5000 lines. The intrinsic-size hint keeps scroll-bar
+     proportions sane for unrendered slabs. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 22px;
+}
+.output .ts { color: var(--vscode-descriptionForeground); margin-right: 6px; }
+.output .server-prefix {
+  font-weight: 600;
+  margin-right: 4px;
+  /* Single unified colour for ALL server prefixes — muted, theme-aware
+     via VS Code's descriptionForeground variable (the same secondary-
+     label tint used by the timestamp and "(none)" placeholders). The
+     bold weight + bracketed `[name]` is enough visual signal for the
+     operator to find the prefix; per-server distinct hues felt too
+     toy-like for an enterprise ops tool. */
+  color: var(--vscode-descriptionForeground);
+}
+.output .header-line {
+  color: var(--vscode-textPreformat-foreground, var(--vscode-foreground));
+  background: var(--vscode-textBlockQuote-background);
+  border-left: 2px solid var(--vscode-textLink-foreground);
+  padding: 2px 6px;
+  margin: 4px 0;
+  font-weight: 600;
+}
+.output .err { color: var(--vscode-errorForeground); }
+.output .warn { color: var(--vscode-editorWarning-foreground); }
+.output .info { color: var(--vscode-charts-blue, var(--vscode-textLink-foreground)); }
+.output.hide-ts .ts, .output.hide-ts .server-prefix { display: none; }
+
+/* ---------- Output block (one per command) ---------- */
+.output .cmd-block {
+  margin: 6px 0;
+  border-left: 3px solid var(--vscode-textLink-foreground);
+  background: var(--vscode-textBlockQuote-background);
+  position: relative;
+  border-radius: 0 3px 3px 0;
+}
+.output .cmd-block.warn {
+  border-left-color: var(--vscode-errorForeground);
+  background: var(--vscode-inputValidation-errorBackground, var(--vscode-textBlockQuote-background));
+}
+.output .cmd-block-header {
+  display: flex;
+  align-items: center;
+  padding: 3px 8px;
+  font-weight: 600;
+  color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+.output .cmd-block.warn .cmd-block-header {
+  color: var(--vscode-errorForeground);
+}
+.output .cmd-block-header .cmd-prompt {
+  margin-right: 6px;
+  opacity: 0.6;
+}
+.output .cmd-block-header .cmd-text {
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--vscode-editor-font-family, monospace);
+}
+.output .cmd-block-header .cmd-block-actions {
+  display: none;
+  gap: 4px;
+}
+/* Show the action row (Copy, etc.) on hover ONLY when the block actually
+   has output content. Empty-body blocks are usually mid-stream cmd
+   echoes or runs that produced no output — copying just the prompt
+   line is useless and the button just adds visual noise.
+   `:has()` is supported in Chromium 105+, which webviews use. */
+.output .cmd-block:hover:has(.cmd-block-body > *) .cmd-block-actions { display: flex; }
+.output .cmd-block-header .copy-block {
+  padding: 0 6px;
+  font-size: 10px;
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.output .cmd-block-header .copy-block:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+.output .cmd-block-header .copy-block.copied {
+  color: var(--vscode-charts-green, #16a34a);
+  border-color: var(--vscode-charts-green, #16a34a);
+}
+.output .cmd-block-body {
+  padding: 4px 8px;
+}
+.output .cmd-block-body .line {
+  padding: 1px 0;
+}
+
+/* ---------- Drillable per-segment paths ---------- */
+.output .path-seg {
+  color: var(--vscode-textLink-foreground);
+  cursor: pointer;
+  border-radius: 2px;
+}
+.output .path-seg:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+  text-decoration: underline;
+}
+.output .path-seg.is-file {
+  font-weight: 500;
+}
+.output .path-sep {
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  user-select: none;
+}
+.output .path-sep:hover {
+  color: var(--vscode-textLink-foreground);
+}
+
+/* ---------- Floating context menu ---------- */
+
+.ctx-menu {
+  position: fixed;
+  z-index: 1000;
+  background: var(--vscode-menu-background, var(--vscode-editor-background));
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  padding: 4px 0;
+  min-width: 180px;
+  font-size: 12px;
+}
+.ctx-menu .ctx-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 5px 14px;
+  cursor: pointer;
+  color: var(--vscode-foreground);
+}
+.ctx-menu .ctx-item:hover,
+.ctx-menu .ctx-item:focus {
+  /* `menu-selection*` is VSCode's own context-menu hover token —
+     stronger contrast than `list-hoverBackground` and theme-aware
+     across light/dark/high-contrast. */
+  background: var(--vscode-menu-selectionBackground, var(--vscode-list-activeSelectionBackground));
+  color: var(--vscode-menu-selectionForeground, var(--vscode-list-activeSelectionForeground));
+  outline: none;
+}
+.ctx-menu .ctx-item.danger {
+  color: var(--vscode-errorForeground, #f14c4c);
+}
+.ctx-menu .ctx-item.danger:hover {
+  background: var(--vscode-inputValidation-errorBackground, var(--vscode-list-hoverBackground));
+  color: var(--vscode-errorForeground, #f14c4c);
+}
+.ctx-menu .ctx-item.disabled,
+.ctx-menu .ctx-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.ctx-menu .ctx-sep {
+  height: 1px;
+  background: var(--vscode-panel-border);
+  margin: 4px 6px;
+}
+.ctx-menu .ctx-label {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+  /* No text-transform: paths are case-sensitive on Linux/macOS, forcing
+     uppercase would mislead the operator about the actual remote path. */
+  padding: 4px 14px 2px;
+  font-family: var(--vscode-editor-font-family, monospace);
+}
+/* Section header within a context menu — declares the scope of the
+   items below ("On {server}", "On all selected (N)", "Navigate"). Smaller
+   + uppercase + dim so it's clearly a label, not a clickable item. */
+.ctx-menu .ctx-group {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+  padding: 6px 14px 2px;
+  font-weight: 600;
+}
+
+/* ---------- Command input ---------- */
+
+.cmd-area {
+  border-top: 1px solid var(--vscode-panel-border);
+  padding: 6px 10px;
+  background: var(--vscode-editorWidget-background);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cmd-toolbar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+.cmd-toolbar-spacer { flex: 1; }
+.cmd-toolbar .cmd-meta { white-space: nowrap; }
+.cmd-toolbar .cmd-tbtn {
+  padding: 2px 10px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.cmd-toolbar .cmd-tbtn:hover { background: var(--vscode-toolbar-hoverBackground); }
+/* Toggle-button pressed state. Uses `aria-pressed="true"` (HTML standard
+   for toggle buttons — also screen-reader-friendly) so the visual cue
+   piggybacks on the same semantic that a11y tools read. Three layers
+   make the "pressed" affordance unmistakable across themes:
+     1. Accent background (list-activeSelection family)
+     2. Inset focus-border 1px ring (gives the depressed-into-toolbar feel)
+     3. Bolder text so the on-state reads heavier than off-state */
+.cmd-toolbar .cmd-tbtn[aria-pressed="true"] {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+  box-shadow: inset 0 0 0 1px var(--vscode-focusBorder);
+  font-weight: 600;
+}
+.cmd-toolbar .cmd-tbtn[aria-pressed="true"]:hover {
+  background: var(--vscode-list-activeSelectionBackground);
+  filter: brightness(1.08);
+}
+.adhoc-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.adhoc-toggle input { margin: 0; }
+.adhoc-toggle .countdown {
+  color: var(--vscode-charts-yellow, #d97706);
+  font-weight: bold;
+  min-width: 22px;
+  font-size: 12px;
+  /* Tabular numerals so the digits in "30s" → "29s" → ... have equal
+     width and the surrounding controls don't reflow on each tick. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+/* Inline upload row sitting under the cmd textarea — always visible so an
+   upload is one click away. */
+.upload-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.upload-row .upload-row-files,
+.upload-row .upload-row-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* min-width: 0 lets flex children shrink below content min-width so
+     overflow-x kicks in on the badge container instead of overflowing
+     the parent row. */
+  min-width: 0;
+}
+/* file-count badges row: scroll horizontally instead of wrapping so the
+   upload-row stays at most two visible lines tall regardless of file
+   count. min-width:0 + flex:1 lets it claim leftover row width. */
+.upload-row .file-count {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  /* Webkit scrollbar default in VSCode dark theme is subtle; setting
+     scrollbar-width here keeps it slim on Firefox-engine themes too. */
+  scrollbar-width: thin;
+}
+/* fade-edge hints: signal to operator that more badges are scrolled out
+   of view in that direction. JS toggles these classes based on
+   scrollLeft / scrollWidth (see syncBadgeFade in main.js). */
+.upload-row .file-count.fade-right {
+  mask-image: linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%);
+}
+.upload-row .file-count.fade-left {
+  mask-image: linear-gradient(to left, black 0, black calc(100% - 24px), transparent 100%);
+}
+.upload-row .file-count.fade-left.fade-right {
+  mask-image: linear-gradient(to right, transparent 0, black 24px, black calc(100% - 24px), transparent 100%);
+}
+.upload-row .upload-file-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px 1px 6px;
+  background: var(--vscode-badge-background, var(--vscode-input-background));
+  color: var(--vscode-badge-foreground, var(--vscode-foreground));
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 10px;
+  font-size: 11px;
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+  max-width: 200px;
+}
+.upload-row .upload-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.upload-row .upload-file-del {
+  cursor: pointer;
+  color: var(--vscode-descriptionForeground);
+  padding: 0 3px;
+  font-size: 11px;
+  border-radius: 50%;
+}
+.upload-row .upload-file-del:hover {
+  color: var(--vscode-errorForeground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+.upload-row .upload-dest {
+  flex: 1;
+  min-width: 120px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-radius: 2px;
+}
+.upload-row .upload-dest:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  border-color: transparent;
+}
+.upload-row .upload-exec {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+  cursor: pointer;
+}
+.upload-row .upload-exec input { margin: 0; }
+
+/* Live preview row — sits under the upload-row showing the resolved
+   remote path each picked file will land at. Tiny, dimmed, monospace. */
+.upload-preview {
+  margin-top: 4px;
+  padding: 2px 4px;
+  font-size: 11px;
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+  color: var(--vscode-descriptionForeground);
+  white-space: pre;
+  overflow-x: auto;
+}
+.upload-preview .upload-preview-line {
+  display: block;
+}
+.upload-preview .upload-preview-arrow {
+  color: var(--vscode-textLink-foreground);
+  margin: 0 6px;
+}
+
+.modify-hint {
+  font-size: 12px;
+  color: var(--vscode-errorForeground);
+  font-weight: bold;
+}
+.cmd-pref-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--vscode-descriptionForeground);
+}
+.cmd-pref-toggle input { margin: 0; }
+.backup-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--vscode-charts-green, #16a34a);
+  color: var(--vscode-button-foreground);
+  font-weight: 600;
+}
+.backup-badge.degraded {
+  background: var(--vscode-descriptionForeground, #6b7280);
+  opacity: 0.85;
+}
+.backup-badge.clickable {
+  cursor: pointer;
+}
+.backup-badge.clickable:hover {
+  filter: brightness(1.1);
+}
+
+/* When the cmd-area is locked, dim the textarea + Run; unlock-exempt bypasses */
+.cmd-area.locked .cmd-wrap textarea,
+.cmd-area.locked .cmd-wrap .btn {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.cmd-wrap textarea.modifying {
+  border-color: var(--vscode-errorForeground) !important;
+  outline: 1px solid var(--vscode-errorForeground) !important;
+}
+
+/* ---------- Modal ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+.modal {
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  /* Tighter than the previous max-80vw — a 360-540px column reads better
+     than a half-screen-wide form for the schedule / aliases modals. */
+  min-width: 360px;
+  width: min(540px, 80vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+.modal-title { flex: 1; font-weight: 600; font-size: 13px; }
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+}
+.modal-close:hover { color: var(--vscode-errorForeground); }
+.modal-body { padding: 10px 12px; overflow-y: auto; font-size: 12px; }
+.modal-body .modal-error {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: var(--vscode-inputValidation-errorBackground, rgba(244, 71, 71, 0.15));
+  border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+  color: var(--vscode-errorForeground, #f14c4c);
+  border-radius: 2px;
+  font-size: 12px;
+}
+.modal-body label { display: block; margin: 6px 0 2px; color: var(--vscode-descriptionForeground); font-size: 11px; }
+.modal-body input[type="text"], .modal-body input[type="number"], .modal-body textarea {
+  width: 100%;
+  padding: 4px 8px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 12px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+.modal-body textarea { resize: vertical; min-height: 40px; }
+.modal-body table { width: 100%; border-collapse: collapse; }
+.modal-body td { padding: 2px 0; vertical-align: middle; }
+.modal-body td input[type="text"] { width: 95%; }
+.modal-body .row-del {
+  background: none;
+  border: none;
+  color: var(--vscode-errorForeground);
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.modal-body .info-line {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  margin: 4px 0;
+}
+.modal-footer {
+  padding: 8px 12px;
+  border-top: 1px solid var(--vscode-panel-border);
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.modal-footer .btn { padding: 4px 14px; font-size: 12px; }
+.selected-count {
+  font-weight: 600;
+  color: var(--vscode-textLink-foreground);
+}
+.cmd-wrap {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+/* Alias auto-suggest dropdown — floats above the textarea so it doesn't push
+   the input around as it appears/disappears. Anchored to the cmd-wrap. */
+.alias-suggest {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 0;
+  right: 60px;
+  background: var(--vscode-menu-background, var(--vscode-editor-background));
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  max-height: 180px;
+  overflow-y: auto;
+  z-index: 200;
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+  font-size: 12px;
+}
+.alias-suggest .alias-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.alias-suggest .alias-item:hover,
+.alias-suggest .alias-item.selected {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+.alias-suggest .alias-name {
+  font-weight: 600;
+  min-width: 80px;
+  color: var(--vscode-textLink-foreground);
+}
+.alias-suggest .alias-item:hover .alias-name,
+.alias-suggest .alias-item.selected .alias-name {
+  color: inherit;
+}
+.alias-suggest .alias-expansion {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--vscode-descriptionForeground);
+}
+.alias-suggest .alias-hint {
+  padding: 4px 10px;
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+  border-top: 1px solid var(--vscode-panel-border);
+  font-style: italic;
+}
+.cmd-wrap textarea {
+  flex: 1;
+  min-height: 32px;
+  max-height: 240px;
+  padding: 6px 10px;
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+  font-size: 14px;
+  resize: none;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-radius: 2px;
+}
+.cmd-wrap textarea:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  border-color: transparent;
+}
+.cmd-wrap .btn { align-self: stretch; padding: 0 14px; font-size: 12px; }

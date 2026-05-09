@@ -1,0 +1,39 @@
+# Source / dev / build configuration — kept out of the .vsix bundle.
+.vscode/**
+.vscode-test/**
+src/**
+out/**
+test/**
+docs/**
+scripts/**
+# Local development scratch area.
+dev-workspace/**
+references/**
+# Tooling state / planning notes — never bundled.
+.claude/**
+PLAN.md
+CLAUDE.md
+# Icon design source — only the rendered PNG ships.
+resources/icon-source.svg
+**/*.ts
+**/*.map
+**/tsconfig.json
+**/esbuild.config.mjs
+**/.eslintrc*
+**/.gitignore
+**/.DS_Store
+**/.git/**
+**/.github/**
+**/vitest.config.ts
+**/*.local.yml
+**/*.local.yaml
+**/secrets.*
+*.vsix
+
+# All runtime deps (ssh2, asn1, bcrypt-pbkdf, safer-buffer, tweetnacl)
+# are now bundled into dist/extension.js by esbuild via the subpath
+# import in src/ssh/connection.ts. Nothing under node_modules/ ships in
+# the VSIX — keeps the bundle platform-agnostic and prevents VS
+# Marketplace's content scanner from flagging the full ssh2 package
+# (which includes server-side code we never use).
+node_modules/**

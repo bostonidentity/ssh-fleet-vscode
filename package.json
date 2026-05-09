@@ -1,0 +1,653 @@
+{
+  "name": "ssh-fleet-vscode",
+  "displayName": "SSH Fleet",
+  "description": "Manage SSH servers from Visual Studio Code: run commands on selected servers, browse remote files, edit via SFTP.",
+  "version": "0.1.0",
+  "preview": true,
+  "private": true,
+  "license": "MIT",
+  "publisher": "BostonIdentity",
+  "icon": "resources/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bostonidentity/ssh-fleet-vscode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bostonidentity/ssh-fleet-vscode/issues"
+  },
+  "homepage": "https://github.com/bostonidentity/ssh-fleet-vscode#readme",
+  "engines": {
+    "vscode": "^1.85.0",
+    "node": ">=18"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "ssh",
+    "sftp",
+    "remote",
+    "multi-server",
+    "fleet",
+    "devops",
+    "sre",
+    "terminal"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onFileSystem:ssh-fleet"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ssh-fleet",
+          "title": "SSH Fleet",
+          "icon": "resources/icons/activity-bar.svg"
+        }
+      ]
+    },
+    "views": {
+      "ssh-fleet": [
+        {
+          "id": "ssh-fleet.configs",
+          "name": "Configs",
+          "icon": "resources/icons/activity-bar.svg",
+          "contextualTitle": "SSH Fleet",
+          "initialSize": 1
+        },
+        {
+          "id": "ssh-fleet.servers",
+          "name": "Servers",
+          "icon": "resources/icons/activity-bar.svg",
+          "contextualTitle": "SSH Fleet"
+        },
+        {
+          "id": "ssh-fleet.tasks",
+          "name": "Tasks",
+          "icon": "resources/icons/activity-bar.svg",
+          "contextualTitle": "SSH Fleet"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "ssh-fleet.servers",
+        "contents": "[$(window) Open SSH Fleet Panel](command:ssh-fleet.openPanel)\n\nThe Panel is the primary UI — server list with checkboxes, task library, command runner, and aggregated output all in one view.\n\n[Setup Workspace](command:ssh-fleet.setupWorkspace)\n[Open Config File](command:ssh-fleet.openConfig)\n[Add Server](command:ssh-fleet.addServer)\n\nDrop existing config YAML files into <workspace>/config/ to reuse them — `username`, `key_file`, `password: ENC(...)`, snake_case fields, and `user@host:port` shorthand are all recognised.",
+        "when": "!ssh-fleet.hasServers"
+      },
+      {
+        "view": "ssh-fleet.servers",
+        "contents": "[$(plug) Reconnect All](command:ssh-fleet.reconnectAll)\n\nNo servers are connected yet — click above to bring up everything in your active config in parallel, or click individual servers below to connect one at a time.",
+        "when": "ssh-fleet.hasServers && ssh-fleet.connectedCount == 0"
+      },
+      {
+        "view": "ssh-fleet.tasks",
+        "contents": "No tasks loaded.\nTasks come from the active config's `tasks:` block and from `*.yml` files in `<workspace>/tasks/`.\n\n[Open Tasks Folder…](command:ssh-fleet.openTasksFolder)\n[Open Config File](command:ssh-fleet.openConfig)\n\nOnce loaded, tick the checkboxes here to select tasks; in the Console run `:run <name>` or use **Run Task on Selected** from the status bar."
+      }
+    ],
+    "commands": [
+      {
+        "command": "ssh-fleet.openPanel",
+        "title": "Open Panel",
+        "category": "SSH Fleet",
+        "icon": "$(window)"
+      },
+      {
+        "command": "ssh-fleet.refresh",
+        "title": "Refresh",
+        "category": "SSH Fleet",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ssh-fleet.addServer",
+        "title": "Add Server",
+        "category": "SSH Fleet",
+        "icon": "$(add)"
+      },
+      {
+        "command": "ssh-fleet.connect",
+        "title": "Connect",
+        "category": "SSH Fleet",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "ssh-fleet.disconnect",
+        "title": "Disconnect",
+        "category": "SSH Fleet",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "ssh-fleet.reconnectAll",
+        "title": "Reconnect All Disconnected",
+        "category": "SSH Fleet",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ssh-fleet.disconnectAll",
+        "title": "Disconnect All",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.updateCredential",
+        "title": "Update Credential…",
+        "category": "SSH Fleet",
+        "icon": "$(key)"
+      },
+      {
+        "command": "ssh-fleet.copyHost",
+        "title": "Copy Host",
+        "category": "SSH Fleet",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "ssh-fleet.connectSelected",
+        "title": "Connect Selected Servers",
+        "category": "SSH Fleet",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "ssh-fleet.disconnectSelected",
+        "title": "Disconnect Selected Servers",
+        "category": "SSH Fleet",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "ssh-fleet.openTerminal",
+        "title": "Open Terminal",
+        "category": "SSH Fleet",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "ssh-fleet.openConfig",
+        "title": "Open Config File",
+        "category": "SSH Fleet",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "ssh-fleet.reloadConfig",
+        "title": "Reload Config",
+        "category": "SSH Fleet",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ssh-fleet.runCommand",
+        "title": "Run Command on Server…",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.runOnGroup",
+        "title": "Run Command on Multiple Servers…",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.runTask",
+        "title": "Run Selected Tasks",
+        "category": "SSH Fleet",
+        "icon": "$(play)"
+      },
+      {
+        "command": "ssh-fleet.runFromHistory",
+        "title": "Run From History…",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.insertBookmark",
+        "title": "Bookmarks…",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.showConnectedQuickPick",
+        "title": "Show Active Connections",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.openRemoteFile",
+        "title": "Open Remote File…",
+        "category": "SSH Fleet",
+        "icon": "$(file)"
+      },
+      {
+        "command": "ssh-fleet.mountRemoteFolder",
+        "title": "Mount Remote Folder as Workspace…",
+        "category": "SSH Fleet",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "ssh-fleet.browseRemote",
+        "title": "Browse Files…",
+        "category": "SSH Fleet",
+        "icon": "$(files)"
+      },
+      {
+        "command": "ssh-fleet.downloadRemoteFile",
+        "title": "Download Remote File…",
+        "category": "SSH Fleet",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "ssh-fleet.pushToRemote",
+        "title": "Push to Remote",
+        "category": "SSH Fleet",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "ssh-fleet.pullFromRemote",
+        "title": "Pull from Remote",
+        "category": "SSH Fleet",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "ssh-fleet.untrackMirror",
+        "title": "Stop Tracking",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.showMirroredFiles",
+        "title": "Show Mirrored Files…",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.revealMirrorFolder",
+        "title": "Reveal Mirror Folder in OS",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.uploadLocalFile",
+        "title": "Upload Local File to Server…",
+        "category": "SSH Fleet",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "ssh-fleet.manageKnownHosts",
+        "title": "Manage Known Hosts…",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.openTasksFolder",
+        "title": "Open Tasks Folder…",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.setupWorkspace",
+        "title": "Setup Workspace…",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.switchWorkspace",
+        "title": "Switch Workspace…",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.switchActiveConfig",
+        "title": "Switch Active Config…",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.revealWorkspace",
+        "title": "Reveal Workspace in OS",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.runTaskByName",
+        "title": "Run Task",
+        "category": "SSH Fleet",
+        "icon": "$(play)"
+      },
+      {
+        "command": "ssh-fleet.filterByEnv",
+        "title": "Filter Servers by Environment…",
+        "category": "SSH Fleet",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "ssh-fleet.filterByModule",
+        "title": "Filter Servers by Module…",
+        "category": "SSH Fleet",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "ssh-fleet.filterByText",
+        "title": "Filter Servers (text)…",
+        "category": "SSH Fleet",
+        "icon": "$(search)"
+      },
+      {
+        "command": "ssh-fleet.filterClear",
+        "title": "Clear Server Filter",
+        "category": "SSH Fleet",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "ssh-fleet.openOnSelected",
+        "title": "Open File on Selected Servers…",
+        "category": "SSH Fleet",
+        "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "ssh-fleet.saveAllToServers",
+        "title": "Save All to Servers",
+        "category": "SSH Fleet",
+        "icon": "$(save-all)"
+      },
+      {
+        "command": "ssh-fleet.diffSiblings",
+        "title": "Diff with Sibling Server…",
+        "category": "SSH Fleet",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "ssh-fleet.copySelectedHosts",
+        "title": "Copy Selected Hosts to Clipboard",
+        "category": "SSH Fleet",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "ssh-fleet.saveSelectedTasksAsFile",
+        "title": "Save Selected Tasks as File…",
+        "category": "SSH Fleet",
+        "icon": "$(save)"
+      },
+      {
+        "command": "ssh-fleet.uploadToManyServers",
+        "title": "Upload Local File to Multiple Servers…",
+        "category": "SSH Fleet",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "ssh-fleet.downloadFromManyServers",
+        "title": "Download Remote Path from Multiple Servers…",
+        "category": "SSH Fleet",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "ssh-fleet.selectAllTasks",
+        "title": "Select All Tasks",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.deselectAllTasks",
+        "title": "Deselect All Tasks",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.openTaskFile",
+        "title": "Open Task File",
+        "category": "SSH Fleet",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "ssh-fleet.newTaskFile",
+        "title": "New Task File…",
+        "category": "SSH Fleet",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "ssh-fleet.taskMoveUp",
+        "title": "Move Task Up",
+        "category": "SSH Fleet",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "ssh-fleet.taskMoveDown",
+        "title": "Move Task Down",
+        "category": "SSH Fleet",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "ssh-fleet.selectTaskFiles",
+        "title": "Select Task Files…",
+        "category": "SSH Fleet",
+        "icon": "$(list-selection)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "ssh-fleet.reloadConfig",
+          "when": "view == ssh-fleet.configs",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ssh-fleet.openConfig",
+          "when": "view == ssh-fleet.configs",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ssh-fleet.runTask",
+          "when": "view == ssh-fleet.tasks",
+          "group": "navigation@-3"
+        },
+        {
+          "command": "ssh-fleet.selectAllTasks",
+          "when": "view == ssh-fleet.tasks",
+          "group": "0_select@0"
+        },
+        {
+          "command": "ssh-fleet.deselectAllTasks",
+          "when": "view == ssh-fleet.tasks",
+          "group": "0_select@1"
+        },
+        {
+          "command": "ssh-fleet.newTaskFile",
+          "when": "view == ssh-fleet.tasks",
+          "group": "navigation@-2"
+        },
+        {
+          "command": "ssh-fleet.openTasksFolder",
+          "when": "view == ssh-fleet.tasks",
+          "group": "1_tasks@0"
+        },
+        {
+          "command": "ssh-fleet.saveSelectedTasksAsFile",
+          "when": "view == ssh-fleet.tasks",
+          "group": "1_tasks@1"
+        },
+        {
+          "command": "ssh-fleet.openPanel",
+          "when": "view == ssh-fleet.configs",
+          "group": "navigation@-1"
+        },
+        {
+          "command": "ssh-fleet.connectSelected",
+          "when": "view == ssh-fleet.servers",
+          "group": "navigation@-2"
+        },
+        {
+          "command": "ssh-fleet.disconnectSelected",
+          "when": "view == ssh-fleet.servers",
+          "group": "navigation@-1"
+        },
+        {
+          "command": "ssh-fleet.disconnectAll",
+          "when": "view == ssh-fleet.servers",
+          "group": "2_actions@1"
+        },
+        {
+          "command": "ssh-fleet.switchWorkspace",
+          "when": "view == ssh-fleet.servers",
+          "group": "3_workspace@1"
+        },
+        {
+          "command": "ssh-fleet.revealWorkspace",
+          "when": "view == ssh-fleet.servers",
+          "group": "3_workspace@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "ssh-fleet.openTerminal",
+          "when": "view == ssh-fleet.servers && viewItem =~ /^server/",
+          "group": "inline@1"
+        },
+        {
+          "command": "ssh-fleet.downloadRemoteFile",
+          "when": "view == ssh-fleet.servers && viewItem =~ /^server/",
+          "group": "inline@2"
+        },
+        {
+          "command": "ssh-fleet.browseRemote",
+          "when": "view == ssh-fleet.servers && viewItem =~ /^server/",
+          "group": "inline@3"
+        },
+        {
+          "command": "ssh-fleet.connect",
+          "when": "view == ssh-fleet.servers && viewItem == server",
+          "group": "1_connection@1"
+        },
+        {
+          "command": "ssh-fleet.disconnect",
+          "when": "view == ssh-fleet.servers && viewItem == server-connected",
+          "group": "1_connection@2"
+        },
+        {
+          "command": "ssh-fleet.updateCredential",
+          "when": "view == ssh-fleet.servers && viewItem =~ /^server/",
+          "group": "1_connection@3"
+        },
+        {
+          "command": "ssh-fleet.copyHost",
+          "when": "view == ssh-fleet.servers && viewItem =~ /^server/",
+          "group": "1_connection@4"
+        },
+        {
+          "command": "ssh-fleet.openOnSelected",
+          "when": "view == ssh-fleet.servers && viewItem == group",
+          "group": "1_group@4"
+        },
+        {
+          "command": "ssh-fleet.runOnGroup",
+          "when": "view == ssh-fleet.servers && viewItem == group",
+          "group": "1_group@1"
+        },
+        {
+          "command": "ssh-fleet.uploadToManyServers",
+          "when": "view == ssh-fleet.servers && viewItem == group",
+          "group": "1_group@2"
+        },
+        {
+          "command": "ssh-fleet.downloadFromManyServers",
+          "when": "view == ssh-fleet.servers && viewItem == group",
+          "group": "1_group@3"
+        },
+        {
+          "command": "ssh-fleet.runTaskByName",
+          "when": "view == ssh-fleet.tasks && viewItem =~ /^task-(command|upload|script)$/",
+          "group": "inline@0"
+        },
+        {
+          "command": "ssh-fleet.runTaskByName",
+          "when": "view == ssh-fleet.tasks && viewItem =~ /^task-(command|upload|script)$/",
+          "group": "0_run@1"
+        },
+        {
+          "command": "ssh-fleet.taskMoveUp",
+          "when": "view == ssh-fleet.tasks && viewItem =~ /^task-(command|upload|script)$/",
+          "group": "1_order@1"
+        },
+        {
+          "command": "ssh-fleet.taskMoveDown",
+          "when": "view == ssh-fleet.tasks && viewItem =~ /^task-(command|upload|script)$/",
+          "group": "1_order@2"
+        },
+        {
+          "command": "ssh-fleet.openTaskFile",
+          "when": "view == ssh-fleet.tasks && viewItem =~ /^(task-source|task-file|task-file-active-config)$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "ssh-fleet.openTaskFile",
+          "when": "view == ssh-fleet.tasks && viewItem =~ /^(task-source|task-file|task-file-active-config|task-command|task-upload|task-script)$/",
+          "group": "1_open@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "ssh-fleet.uploadLocalFile",
+          "when": "resourceScheme == file && !explorerResourceIsFolder",
+          "group": "5_cutcopypaste"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "ssh-fleet.pushToRemote",
+          "when": "ssh-fleet.activeFileIsMirrored",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ssh-fleet.pullFromRemote",
+          "when": "ssh-fleet.activeFileIsMirrored",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ssh-fleet.saveAllToServers",
+          "when": "ssh-fleet.activeFileHasSiblings",
+          "group": "navigation@3"
+        },
+        {
+          "command": "ssh-fleet.diffSiblings",
+          "when": "ssh-fleet.activeFileHasSiblings",
+          "group": "navigation@4"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "ssh-fleet.pushToRemote",
+          "when": "ssh-fleet.activeFileIsMirrored",
+          "group": "ssh-fleet@1"
+        },
+        {
+          "command": "ssh-fleet.pullFromRemote",
+          "when": "ssh-fleet.activeFileIsMirrored",
+          "group": "ssh-fleet@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SSH Fleet",
+      "properties": {
+        "ssh-fleet.workspaceDir": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path (or ~/-prefixed) to the SSH Fleet working directory. Holds config/, tasks/, mirror/, and known_hosts.json. Empty = run the first-run wizard."
+        },
+        "ssh-fleet.defaultTimeout": {
+          "type": "number",
+          "default": 60,
+          "description": "Default command timeout in seconds (0 = no timeout)."
+        },
+        "ssh-fleet.keepaliveInterval": {
+          "type": "number",
+          "default": 30,
+          "description": "TCP keepalive interval in seconds for active SSH connections."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:up": "docker compose -f test/fixtures/docker-compose.yml up -d",
+    "smoke:down": "docker compose -f test/fixtures/docker-compose.yml down -v",
+    "vscode:prepublish": "node esbuild.config.mjs --production"
+  },
+  "dependencies": {
+    "ssh2": "^1.15.0",
+    "yaml": "^2.5.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/ssh2": "^1.15.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.1",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.5"
+  }
+}

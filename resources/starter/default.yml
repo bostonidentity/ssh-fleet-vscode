@@ -1,0 +1,170 @@
+# SSH Fleet starter config — replace example-01 with your real servers and
+# reload. To run multiple configs, add more *.yml files in this folder and
+# switch between them via the CONFIGS sidebar (or "SSH Fleet: Switch Active
+# Config…" command).
+#
+# Many features below don't have a UI yet — they're configured here. Keep
+# this file as your reference; copy the blocks you need into your own
+# configs as you go.
+
+# ─── Global settings ──────────────────────────────────────────────────────
+settings:
+  defaultTimeout: 60       # seconds before an unresponsive command is killed
+  keepaliveSeconds: 30     # SSH keepalive ping interval (lower = faster
+                           # disconnect detection, more network chatter)
+  lsCommand: "ls -ltr"     # default for breadcrumb / bookmark / dir-click
+                           # navigation. Override per-run via the cwd-bar
+                           # ls ▾ dropdown checkboxes.
+  archiveFormat: auto      # 'auto' | 'zip' | 'tar.gz' — used by right-click
+                           # "Download as archive…" on a remote folder.
+                           # 'auto' picks zip when the remote has it
+                           # (best for Windows recipients), tar.gz otherwise.
+  archiveMinDepth: 2       # refuse to archive paths shallower than this many
+                           # segments. Default 2 blocks `/`, `/tmp`, `/etc`,
+                           # etc. — these routinely contain GB of unrelated
+                           # data and right-clicking them is usually a misclick.
+  shortenHostnames: true   # `[aaa.bbb.example.com]` line prefixes display
+                           # as `[aaa]` to save horizontal space; full name
+                           # kept on hover. IPv4/IPv6 are never truncated.
+                           # Set false to keep the full hostname inline.
+  preventSleep: false      # if true, prevents the LOCAL workstation from
+                           # sleeping while at least one SSH connection is
+                           # alive. Useful when long broadcasts run on a
+                           # laptop that would otherwise idle-sleep. macOS
+                           # uses `caffeinate`, Linux `systemd-inhibit`,
+                           # Windows `SetThreadExecutionState` — all
+                           # subprocess-based, so no leaked locks if the
+                           # extension crashes.
+
+# ─── Servers ──────────────────────────────────────────────────────────────
+# Three auth flavours below — pick whichever fits each box. The shorthand
+# "user@host:port" form is also accepted (ssh-fleet parses it like ssh does).
+#
+# Useful per-server fields beyond name/host/port/user/auth:
+#   groups:         [a, b]        # arbitrary tags; the Servers tree groups
+#                                  # by these and the cascade-checkbox
+#                                  # selects every member at once.
+#   environment:    prod          # filterable via Filter > Env in sidebar
+#   module:         api           # filterable via Filter > Module
+servers:
+  # 1. Agent auth (uses your local ssh-agent — most common, zero friction).
+  - name: example-01
+    host: 127.0.0.1
+    port: 22
+    user: ${USER}
+    auth:
+      type: agent
+    groups: [demo]
+    environment: dev
+    module: api
+
+  # 2. Key auth with an explicit private key path (and optional passphrase
+  #    stored in VSCode SecretStorage, prompted on first use).
+  # - name: example-02
+  #   host: 10.0.0.42
+  #   user: deploy
+  #   auth:
+  #     type: key
+  #     keyPath: ~/.ssh/deploy_ed25519
+  #     # passphraseRef: deploy-key-pass     # SecretStorage key name
+  #   groups: [demo]
+  #   environment: dev
+  #   module: db
+
+  # 3. Password auth (stored in SecretStorage; prompted on first use).
+  #    Avoid plaintext `password:` outside dev fixtures.
+  # - name: example-03
+  #   host: 10.0.0.43
+  #   user: ops
+  #   auth:
+  #     type: password
+  #     passwordRef: ops-prod-pass
+  #   environment: prod
+
+# ─── Aliases ──────────────────────────────────────────────────────────────
+# Type the alias as the FIRST WORD in the cmd input — auto-suggest pops a
+# dropdown, Tab/Enter expands. Args after the alias are passed through.
+aliases:
+  ll:    "ls -ltrah"
+  ports: "ss -tlnp"
+  cpu:   "top -b -n1 | head -20"
+
+# ─── Bookmarks ────────────────────────────────────────────────────────────
+# One-click "cd & ls" targets. Add via the ★ button in the cwd bar or
+# edit this list directly. Click a bookmark in the cwd-bar dropdown to
+# navigate.
+bookmarks:
+  - /var/log/
+  - /etc/
+
+# ─── Safety nets ──────────────────────────────────────────────────────────
+safety:
+  # Servers whose name OR host matches a glob pattern get a coloured
+  # badge in the Servers tree AND an extra confirmation modal before
+  # any destructive run.
+  serverWarnPatterns:
+    - pattern: "*prod*"
+      label: PROD
+      color: "#dc2626"
+    # - pattern: "db-*"
+    #   label: DB
+    #   color: "#f59e0b"
+
+  # Pre-flight stat: when running cp / mv / > / tee / install or an upload
+  # task, if the destination already exists on any target server, the
+  # operator is asked to confirm the overwrite. ON by default — flip
+  # the enabled flag to false to suppress. The commands list controls
+  # which verbs trigger the check.
+  destCheck:
+    enabled: true
+    commands: [cp, mv, ">", tee, install, upload]
+
+  # Auto-backup: before a destructive run, copy the existing target to
+  # <backupDir>/<ISO-timestamp>_<basename>. OFF by default because
+  # backupDir has to actually exist on every remote (the SSH user must
+  # be able to write there). To enable: set enabled to true AND make
+  # sure the dir is writable on each host. Backup failure aborts the run.
+  autoBackup:
+    enabled: false
+    backupDir: /opt/backup
+    commands: [rm, mv, cp, ">", sed, upload]
+
+# ─── Tasks ────────────────────────────────────────────────────────────────
+# Three task types are recognised. The "type:" field is auto-detected
+# from which fields you set — see comments below. Tasks defined here
+# are scoped to THIS config; reusable tasks go in <workspace>/tasks/*.yml
+# and are toggled per-config via the "Task Files" row in the Tasks tree.
+tasks:
+  # 1. Plain shell command. Auto-named "command-N" if you skip "name:".
+  - name: uptime
+    command: uptime
+    timeout: 10
+
+  # Command with environment overrides (set only for this run):
+  # - name: db-status
+  #   command: psql -c "SELECT version()"
+  #   env:
+  #     PGHOST: localhost
+  #     PGUSER: readonly
+
+  # Command with explicit confirmation modal (independent of the
+  # modifying-command auto-detection):
+  # - name: clear-cache
+  #   command: rm -rf /var/cache/myapp/*
+  #   confirmBeforeRun: true
+
+  # 2. Upload (SFTP put). "src" is local (relative to workspace root),
+  #    "dest" is remote. Optional "mode:" is octal — e.g. "0755" for
+  #    executable. Auto-detected as type: upload by having both src+dest.
+  # - name: upload-config
+  #   src: ./payloads/app.conf
+  #   dest: /etc/myapp/app.conf
+  #   mode: "0644"
+
+  # 3. Script (upload + chmod 0755 + run + cleanup). "src" is the local
+  #    script, "args" optional. Auto-detected as type: script by having
+  #    src but no dest.
+  # - name: collect-stats
+  #   src: ./payloads/collect-stats.sh
+  #   args: "--format json"
+  #   timeout: 60

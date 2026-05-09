@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource}; script-src 'nonce-${nonce}'; font-src ${cspSource};">
+  <link rel="stylesheet" href="${styleUri}">
+  <title>SSH Fleet Filter</title>
+</head>
+<body>
+<div class="filter-row">
+  <div class="filter-dd-wrap">
+    <button class="filter-dd-btn" id="btnEnvDd" title="Filter by environment"><span id="envDdLabel">Envs</span><span class="arrow">▾</span></button>
+    <div class="filter-dd hidden" id="envDd"></div>
+  </div>
+  <div class="filter-dd-wrap">
+    <button class="filter-dd-btn" id="btnModDd" title="Filter by module"><span id="modDdLabel">Modules</span><span class="arrow">▾</span></button>
+    <div class="filter-dd hidden" id="modDd"></div>
+  </div>
+  <input type="text" class="filter-input" id="filterText" placeholder="name / host / group…" autocomplete="off" spellcheck="false">
+  <button class="filter-clear-btn" id="btnFilterClear" title="Clear all filters">✕</button>
+</div>
+<script nonce="${nonce}" src="${scriptUri}"></script>
+</body>
+</html>

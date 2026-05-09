@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Marketplace icon for SSH Fleet. Two-element composition optimised for
+       multi-resolution legibility (128px card / 36px search list):
+         - Bold terminal-prompt bracket ">" on the left (stroke 12)
+         - Three chunky server bars on the right
+       Connecting lines were tried and dropped — strokes thin enough to
+       fan out at 128px disappear at 36px, so we let visual proximity
+       carry the "operator → fleet" reading instead.
+       Palette: VSCode-friendly teal background; white foreground; tiny
+       green status dots survive at 96px+ as decorative detail. -->
+
+  <!-- Rounded square background -->
+  <rect x="0" y="0" width="128" height="128" rx="22" ry="22" fill="#0e7490"/>
+
+  <!-- Terminal-prompt bracket on the left — bold so it survives 36px -->
+  <path d="M 22 30 L 50 64 L 22 98"
+        stroke="#ffffff" stroke-width="12"
+        fill="none"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Fleet: three chunky server bars on the right -->
+  <rect x="68" y="22" width="42" height="22" rx="4" ry="4" fill="#ffffff"/>
+  <rect x="68" y="53" width="42" height="22" rx="4" ry="4" fill="#ffffff"/>
+  <rect x="68" y="84" width="42" height="22" rx="4" ry="4" fill="#ffffff"/>
+
+  <!-- Connected-state indicators on each server (vanish gracefully at 36px) -->
+  <circle cx="78" cy="33" r="3" fill="#22c55e"/>
+  <circle cx="78" cy="64" r="3" fill="#22c55e"/>
+  <circle cx="78" cy="95" r="3" fill="#22c55e"/>
+</svg>

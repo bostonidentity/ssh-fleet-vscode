@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource}; script-src 'nonce-${nonce}'; font-src ${cspSource};">
+  <link rel="stylesheet" href="${styleUri}">
+  <title>SSH Fleet Console</title>
+</head>
+<body>
+<!-- Output tabs (Output is permanent; per-server tabs added on demand) -->
+<div class="output-tabs" id="outputTabs"></div>
+
+<!-- Toolbar above output. Run progress / Cancel live on the LEFT during a
+     broadcast; the static buttons (T / Copy / Scroll / Clear) push to the
+     RIGHT via the spacer so they stay out of the way of streaming output. -->
+<div class="panel-toolbar">
+  <div class="run-progress hidden" id="runProgress">
+    <div class="run-progress-bar"><div class="run-progress-fill" id="runProgressFill"></div></div>
+    <span class="run-progress-text" id="runProgressText">0/0</span>
+    <button class="tbtn danger" id="btnCancelRun" title="Cancel running broadcast">■ Cancel</button>
+  </div>
+  <span class="toolbar-spacer"></span>
+  <button class="tbtn" id="btnToggleTs" title="Toggle timestamps">T</button>
+  <button class="tbtn" id="btnCopyAll" title="Copy all output">⎘ All</button>
+  <button class="tbtn" id="btnScrollBottom" title="Scroll to bottom">⇩</button>
+  <button class="tbtn danger" id="btnClear" title="Clear output">✕ Clear</button>
+</div>
+
+<!-- Output area -->
+<div class="output" id="output"></div>
+
+<!-- Floating right-click context menu -->
+<div class="ctx-menu hidden" id="ctxMenu"></div>
+
+<!-- CWD bar — clickable breadcrumb, bookmark star, ls options dropdown, saved bookmarks. Sits directly above the ad-hoc cmd input so cwd context lives next to the prompt. -->
+<div class="cwd-bar" id="cwdBar">
+  <span class="cwd-label">cwd</span>
+  <button class="cwd-btn cwd-home-btn" id="btnHome" title="Go to home directory (cd ~ &amp;&amp; ls)" aria-label="home">
+    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+      <path fill="currentColor" d="M8 1.5 1.5 7H3v6.5h3.5V10h3v3.5H13V7h1.5L8 1.5z"/>
+    </svg>
+  </button>
+  <!-- Bookmarks combo: ★ button toggles a dropdown that has "Add current
+       directory" at the top followed by the saved list. One control covers
+       both add and recall. -->
+  <div class="cwd-dd-wrap">
+    <button class="cwd-btn" id="btnBookmarks" title="Bookmarks (add current / open saved)">★ <span id="bookmarksCount">0</span></button>
+    <div class="cwd-dd hidden" id="bookmarksDd"></div>
+  </div>
+  <div class="cwd-dd-wrap">
+    <button class="cwd-btn" id="btnCwdHistory" title="Recent directories visited this session">↩</button>
+    <div class="cwd-dd hidden" id="cwdHistoryDd"></div>
+  </div>
+  <div class="cwd-dd-wrap">
+    <button class="cwd-btn" id="btnLsOpts" title="ls options">ls ▾</button>
+    <div class="cwd-dd hidden" id="lsDd">
+      <label><input type="checkbox" id="ls_l" checked> -l (long)</label>
+      <label><input type="checkbox" id="ls_t" checked> -t (sort by time)</label>
+      <label><input type="checkbox" id="ls_r" checked> -r (reverse)</label>
+      <label><input type="checkbox" id="ls_a"> -a (hidden)</label>
+      <label><input type="checkbox" id="ls_h"> -h (human sizes)</label>
+      <div class="cwd-dd-preview" id="lsDdPreview">ls -ltr</div>
+      <button class="btn primary" id="btnLsRun">Run</button>
+    </div>
+  </div>
+  <span class="cwd-crumb" id="cwdCrumb"><span class="cwd-empty">no servers selected</span></span>
+  <button class="cwd-btn cwd-copy-btn" id="btnCopyCwd" title="Copy current path to clipboard" aria-label="copy cwd">
+    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+      <path fill="currentColor" d="M4 1.5h7A1.5 1.5 0 0 1 12.5 3v1H11V3H4v9h1.5v1.5H4A1.5 1.5 0 0 1 2.5 12V3A1.5 1.5 0 0 1 4 1.5zM6.5 5h7A1.5 1.5 0 0 1 15 6.5v8a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 5 14.5v-8A1.5 1.5 0 0 1 6.5 5zm0 1.5v8h7v-8h-7z"/>
+    </svg>
+  </button>
+  <span class="cwd-spacer"></span>
+  <span class="backup-badge hidden" id="backupBadge" title="auto-backup is enabled in safety config">🛡 backup</span>
+</div>
+
+<!-- Bottom command input -->
+<div class="cmd-area locked" id="cmdArea">
+  <div class="cmd-toolbar">
+    <label class="adhoc-toggle" title="Toggle Ad-hoc mode to type commands. Auto-locks after 60s of inactivity.">
+      <input type="checkbox" id="adhocToggle">Ad-hoc <span class="countdown" id="adhocCountdown"></span>
+    </label>
+    <button class="cmd-tbtn unlock-exempt" id="btnSchedule" title="Schedule a periodic command">⏰ Schedule</button>
+    <button class="cmd-tbtn unlock-exempt" id="btnAliases" title="Edit aliases">Aliases</button>
+    <button class="cmd-tbtn unlock-exempt" id="btnUploadToggle" aria-pressed="false" title="Show upload row (pick local files + send to selected servers)">📎 Upload</button>
+    <span id="modifyHint" class="modify-hint hidden">⚠ modifying command</span>
+    <span class="cmd-toolbar-spacer"></span>
+    <span class="cmd-meta">Target: <span class="selected-count" id="selectedCount">0</span></span>
+  </div>
+  <div class="cmd-wrap">
+    <textarea id="cmdInput" rows="1" placeholder="Enable Ad-hoc, type a command. Tab=complete · ↑↓=history · aliases auto-suggest." autocomplete="off" spellcheck="false"></textarea>
+    <button class="btn primary" id="btnRunCmd">▶ Run</button>
+    <!-- Floating alias suggestion dropdown — anchored above the textarea, populated as the user types the first word. -->
+    <div class="alias-suggest hidden" id="aliasSuggest" role="listbox"></div>
+  </div>
+  <!-- Upload row — file picker + inline dest path + exec checkbox + Upload.
+       Always-visible so an upload is one click away without a context switch.
+       File-picker UX is split: the webview can't open the OS picker
+       directly (sandboxed), so the "📎 Files" button asks the extension
+       to show showOpenDialog and posts the result back here. -->
+  <div class="upload-row hidden" id="uploadRow">
+    <div class="upload-row-files">
+      <button class="cmd-tbtn unlock-exempt" id="btnUploadFiles" title="Pick local file(s) to upload">📎 Files</button>
+      <span class="file-count" id="uploadFileCount"></span>
+      <button class="cmd-tbtn unlock-exempt hidden" id="btnUploadClear" title="Clear picked files">✕</button>
+    </div>
+    <div class="upload-row-action">
+      <input type="text" id="uploadDest" class="upload-dest" placeholder="/opt/app/file.txt   or   /opt/app/  (dir, basename auto-appended)" autocomplete="off" spellcheck="false">
+      <label class="upload-exec" title="Set mode 0755 after upload">
+        <input type="checkbox" id="uploadExec">exec
+      </label>
+      <button class="cmd-tbtn unlock-exempt" id="btnUploadGo" title="Upload to ticked servers">⇧ Upload</button>
+    </div>
+  </div>
+  <!-- Tiny live preview of what dest path each file will land at — shown
+       only when there's anything to preview (helps confirm "dir-ending
+       dest auto-appends basename"). -->
+  <div class="upload-preview hidden" id="uploadPreview"></div>
+</div>
+
+<!-- Modal overlay (singleton, reused for Schedule / Aliases / Help / etc.) -->
+<div class="modal-backdrop hidden" id="modalBackdrop">
+  <div class="modal" id="modalBox">
+    <div class="modal-header"><span class="modal-title" id="modalTitle"></span><button class="modal-close" id="modalClose">✕</button></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+
+<script nonce="${nonce}" src="${scriptUri}"></script>
+</body>
+</html>

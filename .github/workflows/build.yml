@@ -1,0 +1,91 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: typecheck + unit tests + bundle (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['20']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  smoke:
+    name: smoke harness (real sshd)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Lock down host-key perms (sshd refuses 0644)
+        # Git tracks neither file mode 0600 nor the read bits, so after
+        # clone the host keys come back world-readable and sshd exits
+        # with "no hostkeys available". chmod them before mount.
+        run: chmod 600 test/fixtures/sshd-config/ssh_host_keys/ssh_host_*_key
+      - name: Start sshd container
+        run: docker compose -f test/fixtures/docker-compose.yml up -d
+      - name: Wait for sshd
+        run: |
+          # The linuxserver/openssh-server image binds port 2222 during
+          # entrypoint init *before* sshd has finished generating host
+          # keys + reading config — a plain `nc -z` says "port open" while
+          # actual handshakes still get RST'd. Use `ssh-keyscan` instead:
+          # it speaks the SSH banner exchange, so it only succeeds when
+          # sshd is genuinely ready to negotiate.
+          for i in {1..60}; do
+            if ssh-keyscan -p 2222 -T 2 127.0.0.1 2>/dev/null | grep -q ssh-; then
+              echo "sshd is up and answering handshakes"; exit 0
+            fi
+            sleep 1
+          done
+          echo "sshd did not come up"
+          docker compose -f test/fixtures/docker-compose.yml logs
+          exit 1
+      - run: npm run smoke
+      - name: Tear down
+        if: always()
+        run: docker compose -f test/fixtures/docker-compose.yml down -v
+
+  package:
+    name: package VSIX
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run build -- --production
+      # NOTE: do NOT pass --no-dependencies. We declare ssh2/cpu-features
+      # as `external` in esbuild so they're require()'d from node_modules
+      # at runtime; --no-dependencies would skip node_modules wholesale,
+      # bypassing the .vscodeignore whitelist and causing "Cannot find
+      # module 'ssh2'" at activate time.
+      - run: npx --yes @vscode/vsce package --skip-license
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ssh-fleet-vscode-vsix
+          path: '*.vsix'
+          retention-days: 14

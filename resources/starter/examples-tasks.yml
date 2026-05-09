@@ -1,0 +1,27 @@
+# Standalone task file. Tick it under "Task Files" in the Tasks tree to
+# layer these tasks into the active config.
+#
+# Task type is auto-detected from which fields you set:
+#   command + (no src)            -> type: command
+#   src + dest                    -> type: upload
+#   src + (no dest)               -> type: script
+
+# 1. Plain commands.
+- name: uptime
+  command: uptime
+  timeout: 10
+
+- name: disk-usage
+  command: df -h
+
+# 2. Upload (SFTP put). Uncomment and adjust src/dest for your workspace.
+# - name: upload-app-config
+#   src: ./payloads/app.conf
+#   dest: /etc/myapp/app.conf
+#   mode: "0644"
+
+# 3. Script (upload + run + cleanup).
+# - name: collect-stats
+#   src: ./payloads/collect-stats.sh
+#   args: "--format json"
+#   timeout: 60
