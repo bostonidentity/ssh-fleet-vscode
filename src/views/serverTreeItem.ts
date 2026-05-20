@@ -1,7 +1,12 @@
 import * as vscode from 'vscode';
 import type { ServerConfig, ConnectionState } from '../config/types.js';
 
-export type TreeNode = GroupNode | ServerNode | FilterRootNode | FilterValueNode;
+export type TreeNode =
+  | GroupNode
+  | ServerNode
+  | FilterRootNode
+  | FilterValueNode
+  | HistoryEntryNode;
 
 /**
  * Synthetic top-level filter row in the Servers TreeView. Env / Module rows
@@ -12,7 +17,7 @@ export type TreeNode = GroupNode | ServerNode | FilterRootNode | FilterValueNode
 export class FilterRootNode extends vscode.TreeItem {
   readonly kind = 'filter-root' as const;
   constructor(
-    readonly axis: 'env' | 'module' | 'text' | 'clear',
+    readonly axis: 'env' | 'module' | 'text' | 'clear' | 'recent',
     label: string,
     description: string,
     iconId: string,
@@ -30,6 +35,54 @@ export class FilterRootNode extends vscode.TreeItem {
     }
     this.tooltip = description ? `${label}: ${description}` : label;
   }
+}
+
+/**
+ * One row under the "Recent" filter root — a saved env+module snapshot.
+ * Clicking applies the combo; right-click menu toggles pinned state or
+ * clears the unpinned history. Pinned entries display ★ and persist
+ * past the MAX_RECENT cap; unpinned entries show a relative timestamp
+ * and eventually fall off.
+ */
+export class HistoryEntryNode extends vscode.TreeItem {
+  readonly kind = 'history-entry' as const;
+  constructor(
+    readonly envs: string[],
+    readonly mods: string[],
+    readonly ts: number,
+    readonly pinned: boolean
+  ) {
+    const label = formatHistoryLabel(envs, mods);
+    super(label, vscode.TreeItemCollapsibleState.None);
+    this.description = pinned ? '★' : formatRelativeTime(ts);
+    this.iconPath = new vscode.ThemeIcon(pinned ? 'star-full' : 'history');
+    this.contextValue = pinned ? 'history-entry-pinned' : 'history-entry';
+    this.tooltip = `${label}${pinned ? ' · pinned' : ''}`;
+    this.command = {
+      command: 'ssh-fleet.applyHistoryEntry',
+      title: 'Apply filter',
+      arguments: [{ envs, mods }]
+    };
+  }
+}
+
+function formatHistoryLabel(envs: string[], mods: string[]): string {
+  const parts: string[] = [];
+  if (envs.length > 0) parts.push(envs.join('/'));
+  if (mods.length > 0) parts.push(mods.join('/'));
+  return parts.join(' · ');
+}
+
+function formatRelativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min}min`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  const d = Math.floor(hr / 24);
+  if (d < 7) return `${d}d`;
+  return new Date(ts).toLocaleDateString();
 }
 
 /**
@@ -106,6 +159,8 @@ export class ServerNode extends vscode.TreeItem {
       `\`${server.user}@${server.host}:${server.port}\`\n\n` +
       `state: ${stateText}\n\n` +
       (server.groups.length > 0 ? `groups: ${server.groups.join(', ')}\n\n` : '') +
+      (server.meta?.environment ? `environment: ${server.meta.environment}\n\n` : '') +
+      (server.meta?.module ? `module: ${server.meta.module}\n\n` : '') +
       (warnLabel ? `⚠️ tagged: \`${warnLabel.label}\`\n\n` : '') +
       (isOtp ? '🔐 prompts every connect (`cachePassword: false`)' : '')
     );

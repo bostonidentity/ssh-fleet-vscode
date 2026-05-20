@@ -262,9 +262,12 @@ export class TaskTreeProvider
 
       // Task Files header — counts include the active config when its
       // tasks are loaded, so the badge matches what's actually in the tree.
+      // The active-config row only renders when its YAML actually defines
+      // tasks — see the matching guard in the `task-file-group` branch.
+      const showActiveConfigRow = !!this.activeConfigBasename() && this.configStore.activeConfigHasTasks;
       const filesActive = this.prefs.selectedTaskFiles.length
-        + (this.prefs.includeActiveConfigTasks && this.activeConfigBasename() ? 1 : 0);
-      const filesTotal = this.taskFiles.length + (this.activeConfigBasename() ? 1 : 0);
+        + (this.prefs.includeActiveConfigTasks && showActiveConfigRow ? 1 : 0);
+      const filesTotal = this.taskFiles.length + (showActiveConfigRow ? 1 : 0);
       out.push(new TaskFileGroupNode(filesActive, filesTotal));
 
       // Bucket tasks by their source file; a task with no recorded source
@@ -288,9 +291,11 @@ export class TaskTreeProvider
       const out: TaskFileNode[] = [];
       // Active config is surfaced first so the operator can untick it like
       // any other source. Routing goes to `includeActiveConfigTasks`.
+      // Hidden when the YAML has no `tasks:` block — there's nothing for
+      // the toggle to load, so the row would just be inert.
       const cfgName = this.activeConfigBasename();
       const cfgPath = this.configStore.sources[0];
-      if (cfgName) {
+      if (cfgName && this.configStore.activeConfigHasTasks) {
         out.push(new TaskFileNode(cfgName, this.prefs.includeActiveConfigTasks, {
           isActiveConfig: true,
           ...(cfgPath ? { fullPath: cfgPath } : {})

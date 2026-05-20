@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { CommandContext } from './context.js';
 import { ServerFilterState } from '../state/serverFilter.js';
+import { pickServer } from './serverPicker.js';
 
 export async function cmdFilterByEnv(ctx: CommandContext): Promise<void> {
   await pickAndApply(
@@ -34,6 +35,54 @@ export async function cmdFilterByText(ctx: CommandContext): Promise<void> {
 
 export function cmdFilterClear(ctx: CommandContext): void {
   ctx.serverFilter.clear();
+}
+
+/** Apply a history entry — sets envs + mods to the recorded combo.
+ *  Wired to the click action on HistoryEntryNode; arg shape is
+ *  `{ envs, mods }`. */
+export function cmdApplyHistoryEntry(ctx: CommandContext, arg: unknown): void {
+  const a = arg as { envs?: unknown; mods?: unknown } | undefined;
+  if (!a) return;
+  const envs = Array.isArray(a.envs) ? a.envs.filter((v): v is string => typeof v === 'string') : [];
+  const mods = Array.isArray(a.mods) ? a.mods.filter((v): v is string => typeof v === 'string') : [];
+  ctx.serverFilter.applyHistoryEntry(envs, mods);
+}
+
+/** Toggle pin on the right-clicked HistoryEntryNode. TreeView passes
+ *  the node itself as the arg. */
+export function cmdTogglePinHistoryEntry(ctx: CommandContext, arg: unknown): void {
+  const node = arg as { envs?: unknown; mods?: unknown } | undefined;
+  if (!node || !Array.isArray(node.envs) || !Array.isArray(node.mods)) return;
+  ctx.serverFilter.togglePin(
+    node.envs.filter((v): v is string => typeof v === 'string'),
+    node.mods.filter((v): v is string => typeof v === 'string')
+  );
+}
+
+/** Remove all unpinned entries from the current config's history.
+ *  Pinned entries survive. */
+export function cmdClearRecentHistory(ctx: CommandContext): void {
+  ctx.serverFilter.clearRecent();
+}
+
+/** Right-click on a server → SET filter to this server's env + module
+ *  (whichever are present). Replaces current env/module selections —
+ *  the operator is asking "show me servers like this one", which means
+ *  the new filter should be exactly this server's metadata, not a
+ *  union with whatever they had before. Text filter is left untouched. */
+export async function cmdFilterByServerMeta(ctx: CommandContext, arg: unknown): Promise<void> {
+  const server = await pickServer(ctx.config.config, arg, 'Filter by which server’s env + module?');
+  if (!server) return;
+  const env = server.meta?.environment;
+  const mod = server.meta?.module;
+  if (!env && !mod) {
+    void vscode.window.showInformationMessage(
+      `SSH Fleet: server "${server.name}" has no meta.environment or meta.module set.`
+    );
+    return;
+  }
+  if (env) ctx.serverFilter.setEnvs([env]);
+  if (mod) ctx.serverFilter.setModules([mod]);
 }
 
 async function pickAndApply(

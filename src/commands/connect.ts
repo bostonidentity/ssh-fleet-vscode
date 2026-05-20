@@ -125,7 +125,11 @@ export async function cmdCopyHost(ctx: CommandContext, arg: unknown): Promise<vo
   void vscode.window.setStatusBarMessage(`SSH Fleet: copied ${server.host}`, 2000);
 }
 
-/** Connect every server currently ticked in the TreeView, in parallel. */
+/** Connect every server currently ticked in the TreeView, in parallel.
+ *  Defensive: when a filter is active, drop selection entries that don't
+ *  pass the filter — VSCode hides their checkbox rows but the Set still
+ *  remembers them, and operators don't expect an action to reach into
+ *  servers they can't see. */
 export async function cmdConnectSelected(ctx: CommandContext): Promise<void> {
   const names = ctx.selection.servers;
   if (names.length === 0) {
@@ -134,10 +138,19 @@ export async function cmdConnectSelected(ctx: CommandContext): Promise<void> {
     );
     return;
   }
-  if (!enforceServerCap(ctx, names.length, 'Connect Selected')) return;
-  const targets = names
+  const all = names
     .map(n => ctx.config.config.servers.find(s => s.name === n))
     .filter((s): s is ServerConfig => !!s);
+  const targets = ctx.serverFilter.isActive()
+    ? all.filter(s => ctx.serverFilter.passes(s))
+    : all;
+  if (targets.length === 0) {
+    void vscode.window.showInformationMessage(
+      'SSH Fleet: every ticked server is hidden by the active filter — clear the filter or tick a visible server.'
+    );
+    return;
+  }
+  if (!enforceServerCap(ctx, targets.length, 'Connect Selected')) return;
   const results = await Promise.all(targets.map(s => connectWithRetry(ctx, s)));
   const failed = results.filter(r => !r).length;
   if (failed > 0) {
@@ -194,7 +207,15 @@ export function cmdDisconnectAll(ctx: CommandContext): void {
  */
 export async function cmdReconnectAll(ctx: CommandContext): Promise<void> {
   const all = ctx.config.config.servers;
-  const targets = all.filter(s => {
+  // When a filter is active, "All" means "all currently in scope" — the
+  // operator's mental model is the visible set, not the full config.
+  // Without this, after narrowing the filter and disconnecting the visible
+  // server, the viewsWelcome "Reconnect All" button would silently re-
+  // establish the hidden servers' connections too.
+  const inScope = ctx.serverFilter.isActive()
+    ? all.filter(s => ctx.serverFilter.passes(s))
+    : all;
+  const targets = inScope.filter(s => {
     const live = ctx.registry.get(s.name);
     return !live || live.state === 'idle' || live.state === 'error';
   });

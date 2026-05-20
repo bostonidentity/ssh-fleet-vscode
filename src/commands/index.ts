@@ -29,7 +29,16 @@ import {
 } from './mirror.js';
 import { cmdManageKnownHosts } from './hostKeys.js';
 import { cmdOpenTasksFolder, cmdOpenTaskFile, cmdNewTaskFile } from './tasks.js';
-import { cmdFilterByEnv, cmdFilterByModule, cmdFilterByText, cmdFilterClear } from './filter.js';
+import {
+  cmdFilterByEnv,
+  cmdFilterByModule,
+  cmdFilterByText,
+  cmdFilterClear,
+  cmdFilterByServerMeta,
+  cmdApplyHistoryEntry,
+  cmdTogglePinHistoryEntry,
+  cmdClearRecentHistory
+} from './filter.js';
 import { cmdOpenOnSelected, cmdSaveAllToServers, cmdDiffSiblings } from './multiEdit.js';
 import {
   cmdCopySelectedHosts,
@@ -93,6 +102,10 @@ export function registerCommands(ctx: CommandContext): vscode.Disposable[] {
   r('ssh-fleet.filterByModule', () => cmdFilterByModule(ctx));
   r('ssh-fleet.filterByText', () => cmdFilterByText(ctx));
   r('ssh-fleet.filterClear', () => cmdFilterClear(ctx));
+  r('ssh-fleet.filterByServerMeta', arg => cmdFilterByServerMeta(ctx, arg));
+  r('ssh-fleet.applyHistoryEntry', arg => cmdApplyHistoryEntry(ctx, arg));
+  r('ssh-fleet.togglePinHistoryEntry', arg => cmdTogglePinHistoryEntry(ctx, arg));
+  r('ssh-fleet.clearRecentHistory', () => cmdClearRecentHistory(ctx));
   r('ssh-fleet.openOnSelected', () => cmdOpenOnSelected(ctx));
   r('ssh-fleet.saveAllToServers', () => cmdSaveAllToServers(ctx));
   r('ssh-fleet.diffSiblings', () => cmdDiffSiblings(ctx));

@@ -2,7 +2,7 @@
   "name": "ssh-fleet-vscode",
   "displayName": "SSH Fleet",
   "description": "Manage SSH servers from Visual Studio Code: run commands on selected servers, browse remote files, edit via SFTP.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "preview": true,
   "private": true,
   "license": "MIT",
@@ -320,6 +320,27 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "ssh-fleet.filterByServerMeta",
+        "title": "Filter by Environment & Module",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.applyHistoryEntry",
+        "title": "Apply Filter History Entry",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.togglePinHistoryEntry",
+        "title": "Pin / Unpin",
+        "category": "SSH Fleet"
+      },
+      {
+        "command": "ssh-fleet.clearRecentHistory",
+        "title": "Clear Filter History (unpinned)",
+        "category": "SSH Fleet",
+        "icon": "$(clear-all)"
+      },
+      {
         "command": "ssh-fleet.openOnSelected",
         "title": "Open File on Selected Servers…",
         "category": "SSH Fleet",
@@ -403,6 +424,16 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "ssh-fleet.applyHistoryEntry",
+          "when": "false"
+        },
+        {
+          "command": "ssh-fleet.togglePinHistoryEntry",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
           "command": "ssh-fleet.reloadConfig",
@@ -510,6 +541,21 @@
           "command": "ssh-fleet.copyHost",
           "when": "view == ssh-fleet.servers && viewItem =~ /^server/",
           "group": "1_connection@4"
+        },
+        {
+          "command": "ssh-fleet.filterByServerMeta",
+          "when": "view == ssh-fleet.servers && viewItem =~ /^server/",
+          "group": "2_filter@1"
+        },
+        {
+          "command": "ssh-fleet.togglePinHistoryEntry",
+          "when": "view == ssh-fleet.servers && viewItem =~ /^history-entry/",
+          "group": "1_history@1"
+        },
+        {
+          "command": "ssh-fleet.clearRecentHistory",
+          "when": "view == ssh-fleet.servers && viewItem == filter-recent",
+          "group": "1_history@1"
         },
         {
           "command": "ssh-fleet.openOnSelected",

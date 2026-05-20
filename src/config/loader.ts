@@ -128,6 +128,11 @@ export interface LoadResult {
    *  (the rest of the config still loads), but the operator needs to see
    *  these or their tasks will silently go missing. */
   taskFileErrors: TaskFileLoadError[];
+  /** Whether the active config file actually defines a non-empty `tasks:`
+   *  block. Independent of `includeActiveConfigTasks` (a user pref that
+   *  decides whether to load them); used by the Tasks tree to hide the
+   *  active-config row entirely when there are no tasks to toggle. */
+  activeConfigHasTasks: boolean;
 }
 
 /**
@@ -148,7 +153,7 @@ export async function loadConfig(
 ): Promise<LoadResult> {
   const { selectedTaskFiles, includeActiveConfigTasks = true } = opts;
   if (!workspace.root) {
-    return { config: appConfigSchema.parse({}), loadedFrom: [], taskSources: {}, taskFileErrors: [] };
+    return { config: appConfigSchema.parse({}), loadedFrom: [], taskSources: {}, taskFileErrors: [], activeConfigHasTasks: false };
   }
 
   const loadedFrom: string[] = [];
@@ -169,6 +174,12 @@ export async function loadConfig(
   const expanded = deepExpand(merged);
   const normalized = normalizeRawConfig(expanded);
   const parsed = appConfigSchema.parse(normalized);
+
+  // Snapshot whether the YAML actually declares tasks — captured BEFORE
+  // any user-pref-driven mutation (see the `!includeActiveConfigTasks`
+  // branch below). The Tasks tree uses this to hide the active-config
+  // row when there's nothing to load.
+  const activeConfigHasTasks = parsed.tasks.length > 0;
 
   // Config-level tasks all originate from the active config file. The user
   // may opt out of loading them via the `includeActiveConfigTasks` pref —
@@ -202,7 +213,7 @@ export async function loadConfig(
     parsed.tasks = [...taskByName.values()];
   }
 
-  return { config: parsed, loadedFrom, taskSources, taskFileErrors };
+  return { config: parsed, loadedFrom, taskSources, taskFileErrors, activeConfigHasTasks };
 }
 
 /** Lazy hook — set after PrefsStore is constructed in extension.ts so that the
@@ -217,6 +228,7 @@ export class ConfigStore implements vscode.Disposable {
   private current: AppConfig = appConfigSchema.parse({});
   private loadedFrom: string[] = [];
   private currentTaskSources: Record<string, string> = {};
+  private currentActiveConfigHasTasks = false;
   private watchers: vscode.FileSystemWatcher[] = [];
   private readonly emitter = new vscode.EventEmitter<AppConfig>();
   readonly onDidChange = this.emitter.event;
@@ -246,6 +258,14 @@ export class ConfigStore implements vscode.Disposable {
     return this.currentTaskSources;
   }
 
+  /** Whether the active config YAML defines a non-empty `tasks:` block,
+   *  regardless of the current `includeActiveConfigTasks` user pref. The
+   *  Tasks tree uses this to hide the active-config row when there is
+   *  nothing for the toggle to load. */
+  get activeConfigHasTasks(): boolean {
+    return this.currentActiveConfigHasTasks;
+  }
+
   /**
    * Reload the active config + standalone task files. Returns true on
    * success, false when the load failed (an error modal is shown
@@ -261,13 +281,14 @@ export class ConfigStore implements vscode.Disposable {
       const includeActiveConfigTasks = this.taskSelection
         ? this.taskSelection.includeActiveConfigTasks()
         : true;
-      const { config, loadedFrom, taskSources, taskFileErrors } = await loadConfig(this.workspace, {
+      const { config, loadedFrom, taskSources, taskFileErrors, activeConfigHasTasks } = await loadConfig(this.workspace, {
         selectedTaskFiles: allowed,
         includeActiveConfigTasks
       });
       this.current = config;
       this.loadedFrom = loadedFrom;
       this.currentTaskSources = taskSources;
+      this.currentActiveConfigHasTasks = activeConfigHasTasks;
       this.attachWatchers(loadedFrom);
       this.emitter.fire(config);
       // Surface per-file load errors as a non-modal toast — without this the

@@ -3,6 +3,8 @@ import type { ServerConfig } from '../config/types.js';
 import { log } from '../util/logger.js';
 
 const STATE_KEY = 'ssh-fleet.filter.v1';
+const HISTORY_KEY = 'ssh-fleet.filter-history.v1';
+const MAX_RECENT = 10;
 
 interface PersistedFilter {
   text: string;
@@ -14,6 +16,18 @@ interface PersistedFilter {
  *  each config remembers its own filter independently. Switching configs
  *  swaps the in-memory filter to whatever was saved for the new one. */
 type FilterMap = Record<string, PersistedFilter>;
+
+/** A snapshot of env+module selections, captured automatically whenever
+ *  the filter changes. `pinned` flips when the operator stars a recent
+ *  entry — pinned entries survive the MAX_RECENT trim indefinitely. */
+export interface HistoryEntry {
+  envs: string[];
+  mods: string[];
+  ts: number;
+  pinned?: boolean;
+}
+
+type HistoryMap = Record<string, HistoryEntry[]>;
 
 /**
  * Active filter applied to the server list. Three orthogonal axes:
@@ -41,6 +55,11 @@ export class ServerFilterState implements vscode.Disposable {
    *  (no active config picked yet). */
   private activeConfigName: string | undefined;
 
+  /** Per-config history of env+module combinations. Loaded once from
+   *  memento, mutated in-place, persisted on every change. Pinned
+   *  entries survive trim; unpinned trim down to MAX_RECENT by ts desc. */
+  private historyByConfig: HistoryMap = {};
+
   constructor(
     private readonly memento?: vscode.Memento,
     private readonly getActiveConfigName?: () => string | undefined
@@ -48,6 +67,7 @@ export class ServerFilterState implements vscode.Disposable {
     if (memento) {
       this.activeConfigName = getActiveConfigName?.();
       this.hydrateFromCurrentConfig();
+      this.hydrateHistory();
     } else {
       log.info('Filter: constructed without memento — running in-memory only');
     }
@@ -122,6 +142,103 @@ export class ServerFilterState implements vscode.Disposable {
 
   private fireChanged(): void {
     this.save();
+    this.captureToHistory();
+    this.emitter.fire();
+  }
+
+  // ─── History ──────────────────────────────────────────────────────
+
+  private hydrateHistory(): void {
+    if (!this.memento) return;
+    const raw = this.memento.get<unknown>(HISTORY_KEY);
+    if (raw && typeof raw === 'object') {
+      this.historyByConfig = raw as HistoryMap;
+    }
+  }
+
+  private saveHistory(): void {
+    if (!this.memento) return;
+    void this.memento.update(HISTORY_KEY, this.historyByConfig);
+  }
+
+  private currentHistoryKey(): string {
+    return this.activeConfigName ?? '__default';
+  }
+
+  private currentHistory(): HistoryEntry[] {
+    const key = this.currentHistoryKey();
+    if (!this.historyByConfig[key]) this.historyByConfig[key] = [];
+    return this.historyByConfig[key];
+  }
+
+  /** Capture current env+mod selection into history. Requires at least
+   *  one module — env-only combos are too ephemeral to be worth keeping
+   *  (they're easy to re-pick from the Envs dropdown). Dedupes by
+   *  value-equal envs+mods (updates ts in place rather than inserting). */
+  private captureToHistory(): void {
+    const envs = [...this.envs];
+    const mods = [...this.mods];
+    if (mods.length === 0) return;
+    const entries = this.currentHistory();
+    const idx = entries.findIndex(e => sameArr(e.envs, envs) && sameArr(e.mods, mods));
+    if (idx >= 0) {
+      entries[idx].ts = Date.now();
+    } else {
+      entries.push({ envs, mods, ts: Date.now() });
+    }
+    this.trimHistory();
+    this.saveHistory();
+  }
+
+  /** Keep all pinned entries; trim non-pinned down to MAX_RECENT by ts desc. */
+  private trimHistory(): void {
+    const key = this.currentHistoryKey();
+    const all = this.historyByConfig[key] ?? [];
+    const pinned = all.filter(e => e.pinned);
+    const nonPinned = all
+      .filter(e => !e.pinned)
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, MAX_RECENT);
+    this.historyByConfig[key] = [...pinned, ...nonPinned];
+  }
+
+  /** Snapshot of the history for the current config (caller may sort
+   *  freely). Returns a copy so mutations don't leak into our state. */
+  getHistory(): HistoryEntry[] {
+    return this.currentHistory().map(e => ({ ...e }));
+  }
+
+  /** Apply the env+mod selections from a history entry. Does NOT
+   *  touch text — user-typed text survives a history apply (intentional;
+   *  history is env+mod scoped, text is its own axis). */
+  applyHistoryEntry(envs: string[], mods: string[]): void {
+    if (sameSet(this.envs, envs) && sameSet(this.mods, mods)) return;
+    this.envs.clear();
+    for (const v of envs) this.envs.add(v);
+    this.mods.clear();
+    for (const v of mods) this.mods.add(v);
+    this.fireChanged();
+  }
+
+  /** Flip pinned flag on the history entry matching the given envs+mods.
+   *  No-op if no such entry exists. */
+  togglePin(envs: string[], mods: string[]): void {
+    const entries = this.currentHistory();
+    const idx = entries.findIndex(e => sameArr(e.envs, envs) && sameArr(e.mods, mods));
+    if (idx < 0) return;
+    entries[idx].pinned = !entries[idx].pinned;
+    entries[idx].ts = Date.now();
+    this.trimHistory();
+    this.saveHistory();
+    this.emitter.fire();
+  }
+
+  /** Remove all unpinned entries from the current config's history. */
+  clearRecent(): void {
+    const key = this.currentHistoryKey();
+    const all = this.historyByConfig[key] ?? [];
+    this.historyByConfig[key] = all.filter(e => e.pinned);
+    this.saveHistory();
     this.emitter.fire();
   }
 
@@ -223,5 +340,18 @@ export class ServerFilterState implements vscode.Disposable {
 function sameSet(set: Set<string>, arr: string[]): boolean {
   if (set.size !== arr.length) return false;
   for (const v of arr) if (!set.has(v)) return false;
+  return true;
+}
+
+/** Order-independent string-array equality (used to dedup history
+ *  entries — Set→Array preserves insertion order, so two semantically
+ *  equal selections may have different array order). */
+function sameArr(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const aSorted = [...a].sort();
+  const bSorted = [...b].sort();
+  for (let i = 0; i < aSorted.length; i++) {
+    if (aSorted[i] !== bSorted[i]) return false;
+  }
   return true;
 }

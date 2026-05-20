@@ -8,6 +8,7 @@ import {
   FilterRootNode,
   FilterValueNode,
   GroupNode,
+  HistoryEntryNode,
   ServerNode,
   type TreeNode
 } from './serverTreeItem.js';
@@ -48,6 +49,29 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
       this.applyFilterToSelection();
       this.emitter.fire(undefined);
     }));
+    // Initial reconcile: both `filter` and `selection` hydrate from their
+    // own mementos independently, so a previous session could leave us
+    // with selection entries that don't pass the loaded filter (operator
+    // saw them in the tree last time because they were connected — but
+    // connections are gone after a window restart). Without this, those
+    // stale selections persist invisibly and Connect Selected would
+    // resurrect hidden servers.
+    this.applyFilterToSelection();
+  }
+
+  /** True when the operator has engaged with this server at all in this
+   *  session — connected, connecting, or in an error state. Used to keep
+   *  in-use servers visible even when the active filter would otherwise
+   *  hide them: the operator's mental model is "I'm working with this
+   *  server, don't make it disappear because I narrowed env=…". Only
+   *  fully-idle servers are hidden by filter. */
+  private isInUse(name: string): boolean {
+    const state = this.registry.get(name)?.state ?? 'idle';
+    return state !== 'idle';
+  }
+
+  private isVisible(s: ServerConfig): boolean {
+    return this.filter.passes(s) || this.isInUse(s.name);
   }
 
   /** Drop checkbox selection for any server that no longer passes the filter. */
@@ -93,7 +117,7 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
           // groups → only servers whose `groups:` includes the name.
           const checked = newState === vscode.TreeItemCheckboxState.Checked;
           const members = item.group === ALL_SERVERS_GROUP
-            ? this.config.servers.filter(s => this.filter.passes(s))
+            ? this.config.servers.filter(s => this.isVisible(s))
             : this.config.servers.filter(s => s.groups.includes(item.group));
           if (checked && cap > 0) {
             // Compute the post-cascade selection size and refuse the
@@ -148,7 +172,10 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
       // Filter rows render before any server — compact, content-sized.
       out.push(...this.filterRoots());
 
-      const visible = this.config.servers.filter(s => this.filter.passes(s));
+      // Visibility = passes the filter OR is in-use (connected / connecting /
+      // error). Keeps actively-used servers from disappearing when the
+      // operator narrows the filter mid-session — see `isInUse`.
+      const visible = this.config.servers.filter(s => this.isVisible(s));
       const grouped = visible.filter(s => s.groups.length > 0);
       const ungrouped = visible.filter(s => s.groups.length === 0);
 
@@ -174,7 +201,7 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
       return out;
     }
     if (element.kind === 'group') {
-      const visible = this.config.servers.filter(s => this.filter.passes(s));
+      const visible = this.config.servers.filter(s => this.isVisible(s));
       // Synthetic "All servers" group → expand to every visible server
       // (none of which are explicitly grouped). Real groups → bucket as
       // before via `groupServers`.
@@ -193,6 +220,17 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
       const selected = new Set(this.filter.selectedModules);
       return ServerFilterState.availableModules(this.config.servers)
         .map(v => new FilterValueNode('module', v, selected.has(v)));
+    }
+    if (element.kind === 'filter-root' && element.axis === 'recent') {
+      // Sort: pinned first (newest-pinned on top), then unpinned by ts desc.
+      // This matches the dropdown design we'd discussed earlier — operators
+      // see their "kept" combos at the top, recent activity below.
+      const history = this.filter.getHistory();
+      const pinned = history.filter(e => e.pinned).sort((a, b) => b.ts - a.ts);
+      const recent = history.filter(e => !e.pinned).sort((a, b) => b.ts - a.ts);
+      return [...pinned, ...recent].map(e =>
+        new HistoryEntryNode(e.envs, e.mods, e.ts, !!e.pinned)
+      );
     }
     return [];
   }
@@ -218,6 +256,18 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
       'text', 'Text', text || '(none)',
       'search', { expandable: false, commandId: 'ssh-fleet.filterByText' }
     ));
+    const history = this.filter.getHistory();
+    if (history.length > 0) {
+      const pinnedCount = history.filter(e => e.pinned).length;
+      const total = history.length;
+      const desc = pinnedCount > 0
+        ? `${total} (${pinnedCount} ★)`
+        : `${total}`;
+      rows.push(new FilterRootNode(
+        'recent', 'Recent', desc,
+        'history', { expandable: true }
+      ));
+    }
     if (this.filter.isActive()) {
       rows.push(new FilterRootNode(
         'clear', 'Clear filter', '',
