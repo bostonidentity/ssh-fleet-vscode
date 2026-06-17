@@ -404,7 +404,13 @@ function bindUI() {
   // (Deselect-after-run is now toggled from the Tasks view overflow menu;
   //  the cmd-area checkbox was removed.)
   document.getElementById('btnCopyAll').onclick = () => {
-    navigator.clipboard?.writeText(outputElem.innerText).catch(() => {});
+    // Read from the in-memory log instead of `outputElem.innerText` —
+    // (1) `innerText` can return partial content for elements under
+    // `content-visibility: auto` (off-screen lines skipped by the
+    // rendering optimisation get dropped from selection AND from
+    // innerText in some browsers), and (2) the DOM is also subject
+    // to MAX_DOM_LINES trim while the log keeps MAX_LOG messages.
+    navigator.clipboard?.writeText(serializeOutputForCopy()).catch(() => {});
   };
   document.getElementById('btnScrollBottom').onclick = () => {
     autoFollow = true;
@@ -2414,6 +2420,33 @@ function formatTs(ms) {
   const d = new Date(ms);
   const pad = (n) => n < 10 ? '0' + n : String(n);
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/** Build a plain-text dump of the current tab's output for clipboard.
+ *  Reads from `outputLog` (5000 message cap) so we don't depend on the
+ *  DOM (subject to MAX_DOM_LINES trim and content-visibility selection
+ *  quirks). Honours the active tab's filter so the copied text matches
+ *  what the operator currently sees. Same prefix format as the rendered
+ *  lines: optional `HH:MM:SS [server] text`. Respects the hide-timestamps
+ *  toggle. */
+function serializeOutputForCopy() {
+  const tab = tabs.get(activeTabId);
+  const filter = tab?.filter ?? (() => true);
+  const hideTs = outputElem?.classList.contains('hide-ts');
+  const out = [];
+  for (const msg of outputLog) {
+    if (!filter(msg)) continue;
+    if (msg.kind === 'header') {
+      out.push(msg.text);
+      continue;
+    }
+    const parts = [];
+    if (msg.ts && !hideTs) parts.push(formatTs(msg.ts));
+    if (msg.serverName && !hideTs) parts.push(`[${msg.serverName}]`);
+    parts.push(msg.text ?? '');
+    out.push(parts.join(' '));
+  }
+  return out.join('\n');
 }
 
 function removeAllChildren(node) {

@@ -15,6 +15,7 @@ import type { ScheduleStore } from '../state/schedule.js';
 import type { ServerFilterState } from '../state/serverFilter.js';
 import type { PrefsStore } from '../state/prefs.js';
 import type { BackupHealthState } from '../state/backupHealth.js';
+import type { ConnectionHistoryStore } from '../state/connectionHistory.js';
 import type { WorkdirStateStore } from '../state/workdirState.js';
 
 export interface CommandContext {
@@ -36,6 +37,7 @@ export interface CommandContext {
   prefs: PrefsStore;
   backupHealth: BackupHealthState;
   workdirState: WorkdirStateStore;
+  connectionHistory: ConnectionHistoryStore;
   /** Map of active Terminal instances per server name. */
   terminals: Map<string, vscode.Terminal>;
 }

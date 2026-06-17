@@ -3,6 +3,7 @@ import type { AppConfig, ServerConfig } from '../config/types.js';
 import type { ConnectionRegistry } from '../ssh/connection.js';
 import type { SelectionState } from '../state/selection.js';
 import { ServerFilterState } from '../state/serverFilter.js';
+import type { ConnectionHistoryStore } from '../state/connectionHistory.js';
 import {
   ALL_SERVERS_GROUP,
   FilterRootNode,
@@ -28,7 +29,8 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
     onDidConfigChange: vscode.Event<AppConfig>,
     private readonly selection: SelectionState,
     private readonly extensionUri: vscode.Uri,
-    private readonly filter: ServerFilterState
+    private readonly filter: ServerFilterState,
+    private readonly connectionHistory: ConnectionHistoryStore
   ) {
     this.config = initialConfig;
     this.subscriptions.push(onDidConfigChange(c => {
@@ -47,6 +49,12 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
     // Filter change → auto-deselect hidden servers + refresh tree.
     this.subscriptions.push(filter.onDidChange(() => {
       this.applyFilterToSelection();
+      this.emitter.fire(undefined);
+    }));
+    // A new `connected` event stamps the timestamp; refresh so the Recent
+    // Connections row resorts and ServerNode tooltips re-render with the
+    // updated "last connected" line.
+    this.subscriptions.push(connectionHistory.onDidChange(() => {
       this.emitter.fire(undefined);
     }));
     // Initial reconcile: both `filter` and `selection` hydrate from their
@@ -232,6 +240,18 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
         new HistoryEntryNode(e.envs, e.mods, e.ts, !!e.pinned)
       );
     }
+    if (element.kind === 'filter-root' && element.axis === 'recent-conn') {
+      // Render recent entries with full ServerNode parity — same state
+      // icon, badges, checkbox, right-click menu as the main list. The
+      // whole point of Recent is to bypass the current filter (so the
+      // operator can reconnect to a server they were just on, even after
+      // narrowing env=DEV mid-session), so we do NOT call isVisible() here.
+      const byName = new Map(this.config.servers.map(s => [s.name, s]));
+      return this.connectionHistory.recent(10)
+        .map(e => byName.get(e.name))
+        .filter((s): s is ServerConfig => !!s)
+        .map(s => this.makeServerNode(s));
+    }
     return [];
   }
 
@@ -264,8 +284,16 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
         ? `${total} (${pinnedCount} ★)`
         : `${total}`;
       rows.push(new FilterRootNode(
-        'recent', 'Recent', desc,
+        'recent', 'Recent filters', desc,
         'history', { expandable: true }
+      ));
+    }
+    const known = new Set(this.config.servers.map(s => s.name));
+    const recentConns = this.connectionHistory.recent(10).filter(e => known.has(e.name));
+    if (recentConns.length > 0) {
+      rows.push(new FilterRootNode(
+        'recent-conn', 'Recent connections', `${recentConns.length}`,
+        'debug-disconnect', { expandable: true }
       ));
     }
     if (this.filter.isActive()) {
@@ -301,7 +329,8 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
     const err = conn?.errorMessage;
     const warn = warningLabelFor(server, this.config);
     const selected = this.selection.isServerSelected(server.name);
-    return new ServerNode(server, state, err, warn, selected, this.extensionUri);
+    const ts = this.connectionHistory.lastConnected(server.name);
+    return new ServerNode(server, state, err, warn, selected, this.extensionUri, ts);
   }
 
   dispose(): void {

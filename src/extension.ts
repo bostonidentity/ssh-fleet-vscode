@@ -18,6 +18,7 @@ import { PrefsStore } from './state/prefs.js';
 import { BackupHealthState } from './state/backupHealth.js';
 import { KeepAwake } from './state/keepAwake.js';
 import { WorkdirStateStore } from './state/workdirState.js';
+import { ConnectionHistoryStore } from './state/connectionHistory.js';
 import { ServerTreeProvider } from './views/serverTreeProvider.js';
 import { TaskTreeProvider } from './views/taskTreeProvider.js';
 import { ConfigsTreeProvider } from './views/configsTreeProvider.js';
@@ -113,6 +114,21 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   const serverFilter = new ServerFilterState(workdirState, activeConfigName);
   ctx.subscriptions.push(config.onDidChange(() => serverFilter.onActiveConfigChanged()));
   ctx.subscriptions.push(serverFilter);
+  // Tracks the last `connected` timestamp for each server name. Records
+  // on every state transition to `connected` (initial connect + reconnect
+  // both stamp fresh). Surfaces in the ServerNode tooltip and powers the
+  // "Recent Connections" filter row.
+  const connectionHistory = new ConnectionHistoryStore(workdirState);
+  ctx.subscriptions.push(connectionHistory);
+  ctx.subscriptions.push(registry.onChange(name => {
+    if (registry.get(name)?.state === 'connected') {
+      connectionHistory.record(name);
+    }
+  }));
+  // Drop entries for servers no longer in the config after reload.
+  ctx.subscriptions.push(config.onDidChange(c =>
+    connectionHistory.prune(new Set(c.servers.map(s => s.name)))
+  ));
   // Probe `backupDir` writability on each connect; the panel turns the
   // 🛡 backup badge gray if any selected server's probe fails. Without
   // this, the operator sees "backup is on" right up until their first rm
@@ -152,7 +168,8 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   }));
 
   const serverTreeProvider = new ServerTreeProvider(
-    config.config, registry, config.onDidChange, selection, ctx.extensionUri, serverFilter
+    config.config, registry, config.onDidChange, selection, ctx.extensionUri, serverFilter,
+    connectionHistory
   );
   ctx.subscriptions.push(serverTreeProvider);
   const serverTreeView = vscode.window.createTreeView<TreeNode>('ssh-fleet.servers', {
@@ -317,6 +334,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
     prefs,
     backupHealth,
     workdirState,
+    connectionHistory,
     terminals: new Map()
   };
   for (const d of registerCommands(cmdCtx)) {

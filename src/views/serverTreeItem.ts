@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { ServerConfig, ConnectionState } from '../config/types.js';
+import { formatLastConnected } from '../state/connectionHistory.js';
 
 export type TreeNode =
   | GroupNode
@@ -17,7 +18,7 @@ export type TreeNode =
 export class FilterRootNode extends vscode.TreeItem {
   readonly kind = 'filter-root' as const;
   constructor(
-    readonly axis: 'env' | 'module' | 'text' | 'clear' | 'recent',
+    readonly axis: 'env' | 'module' | 'text' | 'clear' | 'recent' | 'recent-conn',
     label: string,
     description: string,
     iconId: string,
@@ -128,7 +129,8 @@ export class ServerNode extends vscode.TreeItem {
     readonly errorMessage: string | undefined,
     readonly warnLabel: { label: string; color: string } | undefined,
     selected: boolean,
-    extensionUri: vscode.Uri
+    extensionUri: vscode.Uri,
+    lastConnectedTs?: number
   ) {
     super(server.name, vscode.TreeItemCollapsibleState.None);
 
@@ -154,10 +156,17 @@ export class ServerNode extends vscode.TreeItem {
     if (warnLabel) badges.push(`${colorEmoji(warnLabel.color)} ${warnLabel.label}`);
     if (isOtp) badges.push('🔐 OTP');
     this.description = badges.join('  ');
+    // Reuse the same relative-time formatter used in the Recent Connections
+    // row, so "5min ago" on hover matches the description shown on the
+    // recent-conn list (one source of truth, no drift).
+    const lastConnectedLine = lastConnectedTs
+      ? `last connected: ${formatLastConnected(lastConnectedTs)}\n\n`
+      : '';
     this.tooltip = new vscode.MarkdownString(
       `**${server.name}**\n\n` +
       `\`${server.user}@${server.host}:${server.port}\`\n\n` +
       `state: ${stateText}\n\n` +
+      lastConnectedLine +
       (server.groups.length > 0 ? `groups: ${server.groups.join(', ')}\n\n` : '') +
       (server.meta?.environment ? `environment: ${server.meta.environment}\n\n` : '') +
       (server.meta?.module ? `module: ${server.meta.module}\n\n` : '') +

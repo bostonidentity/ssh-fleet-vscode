@@ -3,6 +3,15 @@
 All notable changes to this project. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-06-17
+
+### Added
+- **Recent Connections** filter row — lists the last 10 servers connected this workspace, sorted by recency. Same icons / checkbox / right-click menu as the main server list. Bypasses the active filter so you can reconnect to a recently-used server even when filtered to a narrower env/module.
+- Server tooltip shows `last connected: 5min ago` when there's a recorded connection.
+
+### Fixed
+- `Copy All` now copies the full output buffer instead of just the visible portion. Manual selection (Cmd+C / Ctrl+C) of off-screen lines also works again.
+
 ## [0.2.0] — 2026-05-13
 
 ### Added

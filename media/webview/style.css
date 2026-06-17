@@ -550,12 +550,14 @@ header h1 {
 .output .line {
   white-space: pre-wrap;
   word-break: break-all;
-  /* Skip layout/paint for off-screen lines — browsers honour this on
-     scroll and it dramatically reduces re-layout cost when the buffer
-     is full of 5000 lines. The intrinsic-size hint keeps scroll-bar
-     proportions sane for unrendered slabs. */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 22px;
+  /* Earlier versions used `content-visibility: auto` here for off-screen
+     paint-skipping, but that breaks selection: text inside skipped
+     elements drops out of the user's drag-selection AND out of
+     `innerText` in some browsers. The performance gain is real but the
+     correctness cost (copy-paste loses half the output) is worse for an
+     ops tool — operators NEED to grab snippets. The "⎘ All" button now
+     bypasses the DOM via `serializeOutputForCopy()` so it's immune to
+     either issue. */
 }
 .output .ts { color: var(--vscode-descriptionForeground); margin-right: 6px; }
 .output .server-prefix {
