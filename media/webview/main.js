@@ -2012,7 +2012,10 @@ function sendCommand() {
   if (command.startsWith(':')) {
     runSpecial(command);
   } else {
-    vscode.postMessage({ type: 'runCommand', command });
+    // source='adhoc' tells the backend this is operator-typed input and
+    // belongs in CommandHistory. runRaw posts source='navigation' so its
+    // synthesized cd / ls commands are silently dispatched.
+    vscode.postMessage({ type: 'runCommand', command, source: 'adhoc' });
   }
   cmdInput.value = '';
   autoGrow(cmdInput);
@@ -2305,15 +2308,13 @@ function runRaw(cmd) {
     flashStatus('Tick at least one server in the sidebar first');
     return;
   }
-  history.push(cmd);
-  if (history.length > 200) history.shift();
-  // The operator just initiated an action that produces output — they
-  // want to see it. Reset auto-follow even if they had scrolled up to
-  // read scrollback; otherwise the new ls / cd-and-ls / etc. lands
-  // below the fold silently. Covers path-link clicks, bookmark clicks,
-  // cwd-history dropdown picks, custom-ls Run, etc.
+  // Intentionally NOT pushing to `history`: runRaw is invoked by clicks
+  // (breadcrumb, Home button, path-link in output, custom ls Run, etc.),
+  // not by operator-typed input. Arrow-key recall should surface only
+  // what the operator actually typed in the Ad-hoc box — otherwise a
+  // session full of navigation buries the real command history.
   autoFollow = true;
-  vscode.postMessage({ type: 'runCommand', command: cmd });
+  vscode.postMessage({ type: 'runCommand', command: cmd, source: 'navigation' });
 }
 
 // Breadcrumb / bookmark / right-click "go here" navigation: chains the cd

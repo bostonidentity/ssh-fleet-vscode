@@ -2,7 +2,7 @@
   "name": "ssh-fleet-vscode",
   "displayName": "SSH Fleet",
   "description": "Manage SSH servers from Visual Studio Code: run commands on selected servers, browse remote files, edit via SFTP.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "preview": true,
   "private": true,
   "license": "MIT",
@@ -511,11 +511,6 @@
           "command": "ssh-fleet.openTerminal",
           "when": "view == ssh-fleet.servers && viewItem =~ /^server/",
           "group": "inline@1"
-        },
-        {
-          "command": "ssh-fleet.downloadRemoteFile",
-          "when": "view == ssh-fleet.servers && viewItem =~ /^server/",
-          "group": "inline@2"
         },
         {
           "command": "ssh-fleet.browseRemote",

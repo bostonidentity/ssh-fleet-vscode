@@ -9,7 +9,6 @@ import { wrapBackup, buildSftpBackupCommand } from './backup.js';
 import { confirmDestCheck, confirmDestOverwrite } from './destCheck.js';
 import { detectModifying } from './safety.js';
 import type { OutputManager } from '../output/channel.js';
-import type { CommandHistory } from './history.js';
 import { log } from '../util/logger.js';
 
 export interface RunTaskOptions {
@@ -18,7 +17,6 @@ export interface RunTaskOptions {
   config: AppConfig;
   registry: ConnectionRegistry;
   output: OutputManager;
-  history: CommandHistory;
   defaultTimeoutMs: number;
   /**
    * Root of the ssh-fleet workspace (the dir containing `config/` and
@@ -99,7 +97,7 @@ interface PerServerResult {
  * - script:  SFTP write to /tmp + chmod 0755 + exec + cleanup
  */
 export async function runTaskOnServers(opts: RunTaskOptions): Promise<void> {
-  const { task, servers, output, history, defaultTimeoutMs, config, registry } = opts;
+  const { task, servers, output, defaultTimeoutMs, config, registry } = opts;
   if (servers.length === 0) {
     return;
   }
@@ -145,7 +143,6 @@ export async function runTaskOnServers(opts: RunTaskOptions): Promise<void> {
   // meaningful identifier; the symbolic name is only useful for selection
   // in the tree.
   output.header(`▶ Running task on ${servers.length} server(s): ${summary}`);
-  await history.record('@broadcast', `task:${task.name}`);
 
   const results: PerServerResult[] = await Promise.all(
     servers.map(server => runTaskOnSingleServer(server, opts, taskTimeoutMs))

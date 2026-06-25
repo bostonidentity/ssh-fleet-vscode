@@ -3,6 +3,19 @@
 All notable changes to this project. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-06-17
+
+### Added
+- All "Download" right-click outputs (single file, multi-server, archive) now land in `<workspace>/download/` with `<base>_<server>_<ts><ext>` filenames — multi-server downloads sit side-by-side in one folder, and the timestamp suffix means re-downloads never silently overwrite previous copies.
+- Real progress bars for remote file open / download / archive download — `mirror.download` now streams via SFTP read stream + pipe, emits byte-level progress events, and shows `12.4 MB / 50.0 MB (24%)` instead of a frozen-looking click.
+
+### Changed
+- Removed the cloud-download inline icon from server rows (still reachable via command palette).
+- `Open file in editor` (push/pull-tracked) is unchanged; only the "Download…" menu items relocated.
+
+### Fixed
+- Ad-hoc command history (↑↓ arrow recall + "Run from History") no longer pollutes with navigation clicks, breadcrumb cd's, `lsRemoteDir`, recursive cd suffixes, or task runs — only operator-typed input from the Ad-hoc input box is recorded.
+
 ## [0.3.0] — 2026-06-17
 
 ### Added

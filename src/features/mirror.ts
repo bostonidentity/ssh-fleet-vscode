@@ -1,5 +1,6 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
+import * as fsRaw from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { ConnectionRegistry } from '../ssh/connection.js';
@@ -204,8 +205,19 @@ export class MirrorStore implements vscode.Disposable {
   /**
    * Fetch a remote file into the local mirror dir, overwriting whatever was
    * there before. Returns the new mirror entry.
+   *
+   * Streams the SFTP read directly into a local write stream so a 500 MB
+   * file doesn't allocate a 500 MB Buffer. The optional `onProgress`
+   * callback fires throughout the transfer (throttled to ~100ms) so
+   * callers can show a real progress bar instead of an indeterminate
+   * spinner. Total bytes from the pre-flight stat() so callers can
+   * compute a percentage even before bytes flow.
    */
-  async download(serverName: string, remotePath: string): Promise<MirrorEntry> {
+  async download(
+    serverName: string,
+    remotePath: string,
+    opts: { onProgress?: (bytesTransferred: number, totalBytes: number) => void } = {}
+  ): Promise<MirrorEntry> {
     const server = this.config.config.servers.find(s => s.name === serverName);
     if (!server) {
       throw new Error(`Unknown server '${serverName}'`);
@@ -217,11 +229,71 @@ export class MirrorStore implements vscode.Disposable {
     if (stat.isDirectory) {
       throw new Error(`${remotePath} is a directory; download only supports files`);
     }
-    const data = await sftp.readFile(remotePath);
+    const total = stat.size;
 
     const localPath = this.localPathFor(serverName, remotePath);
     await fs.mkdir(path.dirname(localPath), { recursive: true });
-    await fs.writeFile(localPath, data);
+
+    // Stream: createReadStream(remote) -> 'data' (accumulate bytes + hash)
+    // -> pipe into createWriteStream(local). Throttle progress callback to
+    // ~100ms so a 100 MB file (~3000 chunks at 32KB each) doesn't fire
+    // 3000 vscode.progress.report calls in a few seconds.
+    const hash = crypto.createHash('sha256');
+    let bytesIn = 0;
+    let lastReport = 0;
+    const PROGRESS_THROTTLE_MS = 100;
+
+    const readStream = await sftp.createReadStream(remotePath);
+    const writeStream = fsRaw.createWriteStream(localPath);
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onData = (chunk: Buffer): void => {
+          bytesIn += chunk.length;
+          hash.update(chunk);
+          if (opts.onProgress) {
+            const now = Date.now();
+            if (now - lastReport >= PROGRESS_THROTTLE_MS) {
+              opts.onProgress(bytesIn, total);
+              lastReport = now;
+            }
+          }
+        };
+        const cleanup = (): void => {
+          readStream.removeListener('data', onData);
+          readStream.removeListener('error', onError);
+          writeStream.removeListener('error', onError);
+          writeStream.removeListener('finish', onFinish);
+        };
+        const onError = (err: Error): void => {
+          cleanup();
+          // Tear down BOTH ends — destroying only the writer leaves the
+          // SFTP read stream still pulling bytes from the wire (back-
+          // pressure goes nowhere) until ssh2 eventually times out.
+          // Destroying the reader closes the SFTP handle immediately.
+          readStream.destroy();
+          writeStream.destroy();
+          reject(err);
+        };
+        const onFinish = (): void => {
+          cleanup();
+          // Final progress tick so the bar lands at 100% (the throttle
+          // may have skipped the last chunk).
+          opts.onProgress?.(bytesIn, total);
+          resolve();
+        };
+        readStream.on('data', onData);
+        readStream.on('error', onError);
+        writeStream.on('error', onError);
+        writeStream.on('finish', onFinish);
+        readStream.pipe(writeStream);
+      });
+    } catch (err) {
+      // Best-effort: drop the partial local file so a retry doesn't see a
+      // truncated copy. ENOENT just means the write never opened.
+      try { await fs.unlink(localPath); } catch { /* ignore */ }
+      throw err;
+    }
 
     const entry: MirrorEntry = {
       localPath,
@@ -230,12 +302,12 @@ export class MirrorStore implements vscode.Disposable {
       downloadedAt: Date.now(),
       remoteMtimeAtDownload: stat.mtime,
       remoteSizeAtDownload: stat.size,
-      contentHashAtDownload: sha256(data)
+      contentHashAtDownload: hash.digest('hex')
     };
     const m = this.read();
     m[localPath] = entry;
     await this.write(m);
-    log.info(`Mirror: downloaded ${serverName}:${remotePath} -> ${localPath}`);
+    log.info(`Mirror: downloaded ${serverName}:${remotePath} -> ${localPath} (${bytesIn} bytes)`);
     this.emitter.fire(entry);
     return entry;
   }

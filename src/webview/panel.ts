@@ -379,7 +379,11 @@ export class SshFleetWebviewPanel {
           return;
         }
         case 'runCommand': {
-          await this.dispatchCommand(msg.command);
+          // Only operator-typed input (source='adhoc') belongs in command
+          // history. Navigation-synthesized commands (cd && ls from a
+          // breadcrumb click, custom ls Run, etc.) post 'navigation' and
+          // are silently dispatched without polluting history.
+          await this.dispatchCommand(msg.command, { fromAdHoc: msg.source === 'adhoc' });
           return;
         }
         case 'runSpecial': {
@@ -610,7 +614,10 @@ export class SshFleetWebviewPanel {
 
   // ---------- Command dispatch ----------
 
-  private async dispatchCommand(rawCommand: string, opts: { skipEcho?: boolean } = {}): Promise<void> {
+  private async dispatchCommand(
+    rawCommand: string,
+    opts: { skipEcho?: boolean; fromAdHoc?: boolean } = {}
+  ): Promise<void> {
     let command = rawCommand.trim();
     if (!command) return;
     // Expand the first-token alias client-side. The broadcast path runs
@@ -754,7 +761,12 @@ export class SshFleetWebviewPanel {
       serverNames: servers.map(s => s.name)
     });
     this.ctx.output.header(`▶ Broadcasting to ${servers.length} server(s): ${command}`);
-    await this.ctx.history.record('@broadcast', command);
+    if (opts.fromAdHoc) {
+      // Gate: only operator-typed input is worth recalling — navigation
+      // dispatches (cd && ls, lsRemoteDir, recursive cd suffix) would
+      // bury the actual command list and clutter "Run from History".
+      await this.ctx.history.record('@broadcast', command);
+    }
 
     // Track this run so a Cancel from the webview can short-circuit the loop.
     const run = { cancelled: false };
@@ -966,10 +978,8 @@ export class SshFleetWebviewPanel {
               this.postLine(`  ${serverName}: skipped (size / type guard)`, 'warn');
               continue;
             }
-            const entry = await this.ctx.mirror.download(serverName, arg);
-            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(entry.localPath));
             const column = i === 0 ? vscode.ViewColumn.Active : vscode.ViewColumn.Beside;
-            await vscode.window.showTextDocument(doc, { viewColumn: column, preview: false });
+            await this.openViaMirrorWithProgress(serverName, arg, stat.size, column);
             opened++;
           } catch (err) {
             this.postLine(`  ${serverName}: ✗ ${(err as Error).message}`, 'error');
@@ -1010,9 +1020,19 @@ export class SshFleetWebviewPanel {
             if (!await this.guardFileOpen(name, arg, stat.size, 'download')) {
               return undefined;  // hard-cap rejection logged inside guard
             }
-            const entry = await this.ctx.mirror.download(name, arg);
-            this.postLine(`  ${name}: ✓ → ${entry.localPath}`);
-            return entry.localPath;
+            const entry = await vscode.window.withProgress(
+              { location: vscode.ProgressLocation.Notification, title: `Downloading ${name}:${arg}…` },
+              (progress) => this.ctx.mirror.download(name, arg, {
+                onProgress: makeProgressForwarder(progress, stat.size)
+              })
+            );
+            // Same flat-download semantic as the right-click "Download from
+            // all selected…" — land in <workspace>/download/ with the
+            // hostname tag so the operator can ls all N versions side-by-
+            // side instead of digging into N per-server mirror subdirs.
+            const finalPath = await this.relocateToDownload(entry.localPath, name, arg);
+            this.postLine(`  ${name}: ✓ → ${finalPath}`);
+            return finalPath;
           } catch (err) {
             this.postLine(`  ${name}: ✗ ${(err as Error).message}`, 'error');
             return undefined;
@@ -1023,14 +1043,13 @@ export class SshFleetWebviewPanel {
           this.postLine('(no files downloaded)', 'warn');
           return;
         }
-        // Single-server: open the result. Multi-server: offer to open the
-        // first one (so the operator can verify) — they can drill into the
-        // mirror tree via Reveal-in-Finder for the rest.
+        // Single-server: open the result. Multi-server: point at the
+        // download dir (all hostname-tagged files are siblings there).
         if (ok.length === 1) {
           const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(ok[0]));
           await vscode.window.showTextDocument(doc);
         } else {
-          this.postLine(`(downloaded ${ok.length}; mirror tree at ${path.dirname(path.dirname(ok[0]))})`);
+          this.postLine(`(downloaded ${ok.length}; files in ${path.dirname(ok[0])})`);
         }
         return;
       }
@@ -1180,9 +1199,7 @@ export class SshFleetWebviewPanel {
         // edit offline and push back when ready instead of stream-saving
         // every keystroke through SFTP.
         if (!await this.guardFileOpen(server, remotePath, stat.size, 'open')) return;
-        const entry = await this.ctx.mirror.download(server, remotePath);
-        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(entry.localPath));
-        await vscode.window.showTextDocument(doc);
+        await this.openViaMirrorWithProgress(server, remotePath, stat.size);
       }
     } catch (err) {
       this.postLine(`✗ ${server}:${remotePath} — ${(err as Error).message}`, 'error');
@@ -1428,23 +1445,124 @@ export class SshFleetWebviewPanel {
    *  in the OS file explorer once the download finishes. */
   private async handleDownloadFile(server: string, remotePath: string): Promise<void> {
     try {
+      // Pre-stat so the progress bar can show "X / Y MB" + percent before
+      // bytes start flowing. Without a known total the bar stays
+      // indeterminate, which is markedly less informative on slow links.
+      const preStat = await this.ctx.registry.get(server)?.sftp.stat(remotePath);
+      const total = preStat?.size ?? 0;
       const entry = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: `Downloading ${server}:${remotePath}…` },
-        () => this.ctx.mirror.download(server, remotePath)
+        (progress) => this.ctx.mirror.download(server, remotePath, {
+          onProgress: makeProgressForwarder(progress, total)
+        })
       );
+      // Right-click "Download…" is a grab-and-go snapshot, not an edit
+      // workflow — relocate from mirror to flat <workspace>/download/ and
+      // untrack so a subsequent edit + save doesn't trigger a push prompt
+      // against a file the operator never intended to push. Edit-and-push
+      // users go through "Open file in editor" (pathOpen) instead, which
+      // stays on the mirror system.
+      const finalLocalPath = await this.relocateToDownload(entry.localPath, server, remotePath);
       const action = await vscode.window.showInformationMessage(
-        `SSH Fleet: downloaded to ${entry.localPath}`,
+        `SSH Fleet: downloaded to ${finalLocalPath}`,
         'Reveal in OS', 'Open'
       );
       if (action === 'Reveal in OS') {
-        await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(entry.localPath));
+        await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(finalLocalPath));
       } else if (action === 'Open') {
-        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(entry.localPath));
+        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(finalLocalPath));
         await vscode.window.showTextDocument(doc);
       }
     } catch (err) {
       this.postLine(`✗ download failed: ${(err as Error).message}`, 'error');
     }
+  }
+
+  /**
+   * Download a remote file via the mirror system and open it in the
+   * editor, wrapped in a Notification-style progress so big-file opens
+   * give visible feedback. Returns once the editor is showing the doc.
+   *
+   * The wait between click and editor was previously silent: mirror.download
+   * SFTP-reads the whole file into memory then writes to disk (no streaming
+   * progress yet), and openTextDocument / showTextDocument can block for
+   * seconds on a multi-MB file's parse + highlight. The withProgress
+   * notification covers the entire wait so the operator knows the click
+   * registered.
+   *
+   * `viewColumn` lets the multi-server `:se` flow place subsequent files
+   * side-by-side via ViewColumn.Beside; defaults to Active for single opens.
+   */
+  private async openViaMirrorWithProgress(
+    server: string,
+    remotePath: string,
+    sizeBytes: number,
+    viewColumn: vscode.ViewColumn = vscode.ViewColumn.Active
+  ): Promise<void> {
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: `Opening ${server}:${remotePath}…`,
+        cancellable: false  // mid-SFTP cancellation not yet plumbed through
+      },
+      async (progress) => {
+        progress.report({ message: `${formatBytes(sizeBytes)} · starting…` });
+        const entry = await this.ctx.mirror.download(server, remotePath, {
+          onProgress: makeProgressForwarder(progress, sizeBytes)
+        });
+        progress.report({ message: 'loading in editor…' });
+        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(entry.localPath));
+        await vscode.window.showTextDocument(doc, { viewColumn, preview: false });
+      }
+    );
+  }
+
+  /**
+   * Move a freshly-downloaded mirror file to <workspace>/download/ with a
+   * hostname + timestamp tag, then untrack from the mirror manifest.
+   * Returns the new local path.
+   *
+   * Filename convention: `<stem>_<server>_<YYYY-MM-DD_HH-mm-ss><ext>`
+   *  - `nginx.conf` from `prod-ig-1` → `nginx_prod-ig-1_2026-06-17_14-22-30.conf`
+   *  - `hosts` (no ext)              → `hosts_prod-ig-1_2026-06-17_14-22-30`
+   *
+   * Timestamp suffix means a re-download never silently overwrites the
+   * previous copy — operators get a history they can diff/revert against
+   * (and clean up manually when the folder gets noisy). Matches the
+   * archive naming convention so all artifacts in `download/` follow the
+   * same rule.
+   */
+  private async relocateToDownload(
+    sourceLocalPath: string,
+    server: string,
+    remotePath: string
+  ): Promise<string> {
+    const downloadDir = this.ctx.workspace.downloadDir();
+    if (!downloadDir) {
+      throw new Error('workspace root not set — cannot resolve download directory');
+    }
+    const base = path.basename(remotePath);
+    const parsed = path.parse(base);
+    const safeServer = server.replace(/[/\\]/g, '_');
+    const ts = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
+    const finalName = `${parsed.name}_${safeServer}_${ts}${parsed.ext}`;
+    const finalPath = path.join(downloadDir, finalName);
+    await fs.mkdir(downloadDir, { recursive: true });
+    // EXDEV fallback: workspace + mirror staging may sit on different
+    // filesystems (rare, but Linux bind-mounts or macOS APFS volumes
+    // can hit this); fall back to copy + unlink to make the move work.
+    try {
+      await fs.rename(sourceLocalPath, finalPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EXDEV') {
+        await fs.copyFile(sourceLocalPath, finalPath);
+        await fs.unlink(sourceLocalPath);
+      } else {
+        throw err;
+      }
+    }
+    await this.ctx.mirror.untrack(sourceLocalPath);
+    return finalPath;
   }
 
   /** Tar.gz a remote directory and download the archive. When called
@@ -1548,12 +1666,34 @@ export class SshFleetWebviewPanel {
           if (r.exitCode !== 0) {
             throw new Error(`${useZip ? 'zip' : 'tar'} failed (exit ${r.exitCode}): ${r.stderr.trim() || r.stdout.trim()}`);
           }
-          const entry = await this.ctx.mirror.download(server, remoteTar);
-          // Move to a clean local name (untrack from mirror — archives are
-          // point-in-time snapshots, not push/pull targets).
+          // Stat the freshly-created tarball so download progress reports
+          // a real percentage instead of "X so far…". Same connection
+          // we used for the compress step, so the round-trip is cheap.
+          const tarSize = parseInt(
+            (await runRemoteCommand(
+              conn,
+              `stat -c %s ${shellQuoteForRemote(remoteTar)} 2>/dev/null || stat -f %z ${shellQuoteForRemote(remoteTar)} 2>/dev/null`,
+              { timeoutMs: 5_000 }
+            )).stdout.trim(),
+            10
+          );
+          const dlTotal = Number.isFinite(tarSize) ? tarSize : 0;
+          progress.report({ message: `downloading ${fmtMB(dlTotal)}…` });
+          const entry = await this.ctx.mirror.download(server, remoteTar, {
+            onProgress: makeProgressForwarder(progress, dlTotal)
+          });
+          // Move to <workspace>/download/<basename>_<server>_<ts>.<ext>.
+          // Archives are point-in-time snapshots (untracked from mirror so
+          // they're not push/pull targets) and live in a dedicated download
+          // dir so multi-server runs land in one place. Server name is in
+          // the filename so two archives of the same path don't collide.
           const ts = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
-          const finalLocalPath = path.join(this.ctx.mirror.rootPath, server, `${baseName}_${ts}.${ext}`);
-          await fs.mkdir(path.dirname(finalLocalPath), { recursive: true });
+          const downloadDir = this.ctx.workspace.downloadDir();
+          if (!downloadDir) {
+            throw new Error('workspace root not set — cannot resolve download directory');
+          }
+          const finalLocalPath = path.join(downloadDir, `${baseName}_${server}_${ts}.${ext}`);
+          await fs.mkdir(downloadDir, { recursive: true });
           await fs.rename(entry.localPath, finalLocalPath);
           await this.ctx.mirror.untrack(entry.localPath);
           const note = formatPref === 'auto' && !useZip
@@ -1633,9 +1773,11 @@ export class SshFleetWebviewPanel {
    *  re-confirms via a modal in case the click came from elsewhere. */
   /**
    * Download the same remote path from EACH currently-selected server.
-   * Each server's file lands in its own subfolder under the workspace
-   * mirror dir so basename collisions don't clobber. Always confirms
-   * since the list of affected servers + the local writes are non-trivial.
+   * Each server's file lands in <workspace>/download/ with a hostname-
+   * tagged name so all N copies are side-by-side in one folder (operator
+   * doesn't have to dig into N per-server subdirs to compare 8 versions
+   * of /etc/foo.conf). Confirmed once — list of affected servers + the N
+   * local writes are non-trivial.
    */
   private async handleDownloadFileMany(remotePath: string): Promise<void> {
     const selected = this.ctx.selection.servers;
@@ -1651,8 +1793,25 @@ export class SshFleetWebviewPanel {
     );
     if (ok !== 'Download') return;
 
+    // Each download: mirror.download() → relocateToDownload() in series
+    // per server but in parallel across servers. Each gets its own
+    // Notification-style progress so the operator sees per-server byte
+    // throughput stacked in the bottom-right (VSCode stacks notifications
+    // automatically; for high-fanout cases this can get visually busy but
+    // an idle-looking click is worse). allSettled so one server's failure
+    // doesn't block the rest.
     const results = await Promise.allSettled(
-      selected.map(server => this.ctx.mirror.download(server, remotePath))
+      selected.map(async server => {
+        const preStat = await this.ctx.registry.get(server)?.sftp.stat(remotePath);
+        const total = preStat?.size ?? 0;
+        const entry = await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `Downloading ${server}:${remotePath}…` },
+          (progress) => this.ctx.mirror.download(server, remotePath, {
+            onProgress: makeProgressForwarder(progress, total)
+          })
+        );
+        return this.relocateToDownload(entry.localPath, server, remotePath);
+      })
     );
     let okCount = 0;
     const localPaths: string[] = [];
@@ -1661,8 +1820,8 @@ export class SshFleetWebviewPanel {
       const server = selected[i];
       if (r.status === 'fulfilled') {
         okCount++;
-        localPaths.push(r.value.localPath);
-        this.ctx.output.line(server, `✓ downloaded → ${r.value.localPath}`);
+        localPaths.push(r.value);
+        this.ctx.output.line(server, `✓ downloaded → ${r.value}`);
       } else {
         this.ctx.output.line(server, `✗ download failed: ${(r.reason as Error).message}`);
       }
@@ -1966,6 +2125,46 @@ function isLikelyBinary(remotePath: string): boolean {
 function defaultTimeoutMs(): number {
   const sec = vscode.workspace.getConfiguration().get<number>('ssh-fleet.defaultTimeout') ?? 60;
   return sec > 0 ? sec * 1000 : 0;
+}
+
+/** Human-friendly byte size: KB / MB / GB with one decimal. Used in
+ *  download progress notifications. */
+function formatBytes(n: number): string {
+  if (n >= 1024 * 1024 * 1024) return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${n} B`;
+}
+
+/** Build an `onProgress` callback that maps byte counts into a
+ *  vscode.Progress report — both as a human-readable message and as a
+ *  determinate progress bar (via `increment` deltas).
+ *
+ *  `initialTotal` is a caller-supplied hint (typically from a pre-stat
+ *  done before withProgress kicks off) so the title can show "X / Y MB"
+ *  before bytes flow. If 0 (caller didn't pre-stat, e.g. server wasn't
+ *  yet connected), the first onProgress firing from mirror.download
+ *  provides the real total via the callback argument and the bar
+ *  becomes determinate from that point on.
+ *
+ *  Each call reports the percentage delta since the prior call so the
+ *  bar grows smoothly; mirror.download fires a final tick at 100% so
+ *  the bar lands cleanly. */
+function makeProgressForwarder(
+  progress: vscode.Progress<{ message?: string; increment?: number }>,
+  initialTotal: number
+): (bytes: number, total: number) => void {
+  let lastPct = 0;
+  return (bytes: number, callbackTotal: number): void => {
+    const total = initialTotal > 0 ? initialTotal : callbackTotal;
+    const pct = total > 0 ? Math.min(100, Math.floor((bytes / total) * 100)) : 0;
+    const inc = pct - lastPct;
+    lastPct = pct;
+    const message = total > 0
+      ? `${formatBytes(bytes)} / ${formatBytes(total)} (${pct}%)`
+      : `${formatBytes(bytes)} so far…`;
+    progress.report({ message, increment: inc > 0 ? inc : undefined });
+  };
 }
 
 function warningLabelFor(

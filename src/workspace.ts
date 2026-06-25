@@ -17,7 +17,8 @@ const LAST_CONFIG_FILE = '.last_config';
  *     config/<*.yml>          ← one or more configs; one is "active"
  *     config/.last_config     ← plain-text basename of the active config
  *     tasks/<*.yml>           ← shared task library
- *     mirror/<server>/<path>  ← downloaded remote files
+ *     mirror/<server>/<path>  ← editor-opened remote files (push/pull tracked)
+ *     download/               ← right-click Download outputs (flat, hostname+ts tagged)
  *     known_hosts.json        ← TOFU trust store
  */
 export class Workspace {
@@ -45,6 +46,16 @@ export class Workspace {
 
   mirrorDir(): string | undefined {
     return this._root ? path.join(this._root, 'mirror') : undefined;
+  }
+
+  /** Flat destination for every "Download" right-click action (single
+   *  files, multi-server files, archive snapshots) — kept separate from
+   *  the editable mirror tree so push/pull tracking and grab-and-go
+   *  downloads don't tangle. Files inside use a `<base>_<server>_<ts><ext>`
+   *  naming convention so multi-server downloads land side-by-side
+   *  without collisions. */
+  downloadDir(): string | undefined {
+    return this._root ? path.join(this._root, 'download') : undefined;
   }
 
   knownHostsPath(): string | undefined {
@@ -115,7 +126,7 @@ export class Workspace {
       return;
     }
     await fs.mkdir(this._root, { recursive: true });
-    for (const sub of ['config', 'tasks', 'mirror']) {
+    for (const sub of ['config', 'tasks', 'mirror', 'download']) {
       await fs.mkdir(path.join(this._root, sub), { recursive: true });
     }
   }

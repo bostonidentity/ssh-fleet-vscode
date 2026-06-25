@@ -1,3 +1,4 @@
+import type { Readable } from 'node:stream';
 import type { SFTPWrapper, Stats } from 'ssh2';
 import type { SshConnection } from './connection.js';
 
@@ -145,6 +146,17 @@ export class SshSftp {
         resolve(data);
       });
     });
+  }
+
+  /**
+   * Open a remote file as a Node Readable stream. Lets callers pipe the
+   * download directly into a local write stream (avoiding loading the
+   * whole file into memory) and emit byte-level progress events along
+   * the way. Caller is responsible for handling 'data' / 'error' / 'end'.
+   */
+  async createReadStream(path: string): Promise<Readable> {
+    const sftp = await this.ensure();
+    return sftp.createReadStream(path);
   }
 
   async writeFile(path: string, data: Buffer): Promise<void> {

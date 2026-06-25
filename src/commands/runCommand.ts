@@ -184,7 +184,6 @@ export async function cmdRunTaskByName(ctx: CommandContext, arg: unknown): Promi
     config: ctx.config.config,
     registry: ctx.registry,
     output: ctx.output,
-    history: ctx.history,
     defaultTimeoutMs: timeoutMs(),
     ...(ctx.workspace.root ? { workspaceRoot: ctx.workspace.root } : {})
   });
@@ -254,7 +253,6 @@ export async function cmdRunTask(ctx: CommandContext): Promise<void> {
       config: ctx.config.config,
       registry: ctx.registry,
       output: ctx.output,
-      history: ctx.history,
       defaultTimeoutMs: timeoutMs(),
       ...(ctx.workspace.root ? { workspaceRoot: ctx.workspace.root } : {})
     });
